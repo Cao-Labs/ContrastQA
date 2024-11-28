@@ -4,7 +4,7 @@
 
 ```bash
 # you need to install chrome and chromedriver
-sudo apt install selenium
+pip install selenium
 ```
 
 ## Usage
