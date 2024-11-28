@@ -10,7 +10,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
+
 
 # 初始化作业计数器
 job_count = 0
@@ -23,7 +23,7 @@ def main():
     parser.add_argument('--user_info', required=True, help='Path to user_info.json file')
     parser.add_argument('--sequences', required=True, help='Path to sequences.json file')
     parser.add_argument('--config', help='Path to config.json file with additional settings')
-    parser.add_argument('--save', action='store_true', help='Save jobs after each target')
+    parser.add_argument('--save', action='store_true', help='Save jobs after each sequence')
     args = parser.parse_args()
 
     # Load user info
@@ -50,17 +50,13 @@ def main():
             'random_seed': 0  # Example setting, adjust as needed
         }
 
-    # 创建 ChromeOptions 对象并设置参数
+    # Initialize WebDriver
     chrome_options = Options()
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     chrome_options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
-    )
-    chrome_options.add_argument('--headless')  # 启用无头模式
-    chrome_options.add_argument('--no-sandbox')  # 禁用沙盒
-    chrome_options.add_argument('--disable-dev-shm-usage')  # 禁用 /dev/shm 使用
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)")
 
     driver = webdriver.Chrome(options=chrome_options)
     driver.maximize_window()
@@ -71,11 +67,12 @@ def main():
         login(driver, username_str, password_str)
         accept_terms(driver)
 
-        # Process each target with its sequences
-        for target_data in sequences:
-            target_name = target_data['target']
-            target_sequences = target_data['fasta']
-            process_target_sequences(driver, target_name, target_sequences, args.save, config)
+        for i, sequence_data in enumerate(sequences):
+            fasta_list = sequence_data.get('fasta', [])
+            for j, fasta_entry in enumerate(fasta_list):
+                # 获取当前 target 的所有链
+                header, sequence = fasta_entry.split('\n', 1)
+                process_sequence(driver, header, sequence, f"{i}_{j}", args.save, config)
 
             # 如果提交了 MAX_JOBS 次作业，则休眠24小时
             if job_count >= MAX_JOBS:
@@ -95,9 +92,9 @@ def main():
 
 
 def sign_in(driver):
-    """sign_in_button = driver.find_element(By.CLASS_NAME,"sign-in")
-    sign_in_button.click()"""
-    wait = WebDriverWait(driver, 30)
+    '''sign_in_button = driver.find_element(By.CLASS_NAME,"sign-in")
+    sign_in_button.click()'''
+    wait = WebDriverWait(driver, random.randint(5, 10))
     sign_in_button = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "sign-in")))
     sign_in_button.click()
 
@@ -181,70 +178,76 @@ def accept_terms(driver):
             pass
 
 
-def process_target_sequences(driver, target_name, sequences, save, config):
-    """处理每个 target 下的多个序列"""
-    copies_number = config.get('copies', 1)
-
-    # Enter the target name
-    if len(sequences) > 0:
-        # Set target name
-        target_input = WebDriverWait(driver, random.randint(5, 10)).until(
-            EC.element_to_be_clickable((By.XPATH, "//input[@id='targetName']"))
+def process_sequence(driver, header, sequence, index, save, config):
+    copies_number = config.get('copies', 2)
+    # First sequence: input data directly
+    if index == 0:
+        # Set number of copies
+        copies = WebDriverWait(driver, random.randint(5, 10)).until(
+            EC.element_to_be_clickable((By.XPATH, "//input[@type='number' and @min='1']"))
         )
-        target_input.clear()
-        target_input.send_keys(target_name)
+        copies.clear()
+        copies.send_keys(str(copies_number))
 
-        # Process each sequence
-        for sequence in sequences:
-            # Enter the sequence
-            sequence_input = WebDriverWait(driver, random.randint(5, 10)).until(
-                EC.element_to_be_clickable((By.XPATH, "//textarea"))
-            )
-            sequence_input.clear()
-            sequence_input.send_keys(sequence)
+        # Enter the sequence
+        sequence_input = WebDriverWait(driver, random.randint(5, 10)).until(
+            EC.element_to_be_clickable((By.XPATH, "//textarea"))
+        )
+        sequence_input.clear()
+        sequence_input.send_keys(sequence)
 
-            # If there's another sequence, add a new entity and remove the old one
-            if sequence != sequences[-1]:
-                add_button = WebDriverWait(driver, random.randint(5, 10)).until(
-                    EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Add entity')]"))
-                )
-                add_button.click()
-
-                # Set number of copies
-                copies_list = WebDriverWait(driver, random.randint(5, 10)).until(
-                    EC.presence_of_all_elements_located((By.XPATH, "//input[@type='number' and @min='1']"))
-                )
-                copies = copies_list[-1]
-                copies.clear()
-                copies.send_keys(str(copies_number))
-
-                # Enter the new sequence
-                sequence_inputs = driver.find_elements(By.XPATH, "//textarea")
-                sequence_input = sequence_inputs[-1]
-                sequence_input.clear()
-                sequence_input.send_keys(sequence)
-
-                # Delete the processed sequence
-                menu_icon = WebDriverWait(driver, random.randint(5, 10)).until(
-                    EC.element_to_be_clickable(
-                        (By.CSS_SELECTOR, "div.menu button.mat-mdc-menu-trigger mat-icon.google-symbols"))
-                )
-                menu_icon.click()
-                delete_button = WebDriverWait(driver, random.randint(5, 10)).until(
-                    EC.element_to_be_clickable(
-                        (By.XPATH, "//button[contains(.,'Delete') and contains(@class,'mat-mdc-menu-item')]"))
-                )
-                delete_button.click()
-
-    # Save or submit the job for this target
-    if save:
-        save_job(driver, target_name)
+    # Other sequences: input new sequence and delete old, saved/processed sequence
     else:
-        submit_job(driver, target_name)
+        try:
+            WebDriverWait(driver, random.randint(5, 10)).until(
+                EC.invisibility_of_element_located((By.CSS_SELECTOR, ".cdk-overlay-backdrop"))
+            )
+        except TimeoutException:
+            print("Overlay did not disappear within the timeout period before adding new entity.")
+            # Handle accordingly, maybe refresh the page or raise an exception
+            driver.refresh()
+            return
+
+        # Add new protein
+        add_button = WebDriverWait(driver, random.randint(5, 10)).until(
+            EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Add entity')]"))
+        )
+        add_button.click()
+
+        # Set number of copies to copies_number on the newly added line
+        copies_list = WebDriverWait(driver, random.randint(5, 10)).until(
+            EC.presence_of_all_elements_located((By.XPATH, "//input[@type='number' and @min='1']"))
+        )
+        copies = copies_list[-1]
+        copies.clear()
+        copies.send_keys(str(copies_number))
+
+        # Enter the new sequence on the newly added line
+        sequence_inputs = driver.find_elements(By.XPATH, "//textarea")
+        sequence_input = sequence_inputs[-1]
+        sequence_input.clear()
+        sequence_input.send_keys(sequence)
+
+        # Delete the processed / saved sequence
+        menu_icon = WebDriverWait(driver, random.randint(5, 10)).until(
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "div.menu button.mat-mdc-menu-trigger mat-icon.google-symbols"))
+        )
+        menu_icon.click()
+        delete_button = WebDriverWait(driver, random.randint(5, 10)).until(
+            EC.element_to_be_clickable(
+                (By.XPATH, "//button[contains(.,'Delete') and contains(@class,'mat-mdc-menu-item')]"))
+        )
+        delete_button.click()
+
+    if save:
+        save_job(driver, header)
+    else:
+        submit_job(driver, header)
 
 
-def save_job(driver, target_name):
-    """Save job after entering the sequences for a target"""
+def save_job(driver, header):
+    # Save job after entering the sequence
     save_job_button = WebDriverWait(driver, random.randint(5, 10)).until(
         EC.element_to_be_clickable((
             By.XPATH, "//span[normalize-space(text())='Save job']/ancestor::button"
@@ -258,7 +261,8 @@ def save_job(driver, target_name):
         ))
     )
     job_name.clear()
-    job_name.send_keys(target_name)
+    sequence_id = header.split('|')[0].strip('>').split('_')[0]
+    job_name.send_keys(sequence_id[:4])
 
     try:
         modal_save_button = WebDriverWait(driver, random.randint(5, 10)).until(
@@ -274,8 +278,8 @@ def save_job(driver, target_name):
             f.write(driver.page_source)
 
 
-def submit_job(driver, target_name):
-    """Submit the job for a target"""
+def submit_job(driver, header):
+    # Preview then submit job directly
     continue_button = WebDriverWait(driver, random.randint(5, 10)).until(
         EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Continue and preview job')]"))
     )
@@ -287,7 +291,8 @@ def submit_job(driver, target_name):
         ))
     )
     job_name.clear()
-    job_name.send_keys(target_name)
+    sequence_id = header.split('|')[0].strip('>').split('_')[0]
+    job_name.send_keys(sequence_id[:4])
 
     confirm_button = WebDriverWait(driver, random.randint(5, 10)).until(
         EC.element_to_be_clickable((
@@ -299,3 +304,4 @@ def submit_job(driver, target_name):
 
 if __name__ == '__main__':
     main()
+
