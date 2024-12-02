@@ -118,6 +118,8 @@ def login(driver, username_str, password_str):
     password_next_button = driver.find_element(By.ID, "passwordNext")
     password_next_button.click()
 
+    print("Waiting for 60 seconds after login...")
+    time.sleep(60)
 
 def accept_terms(driver):
     continue_button_found = False
