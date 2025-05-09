@@ -44,29 +44,28 @@ def get_dssp(fasta_file, pdb_path):
         return seq, dssp_feature  # Return sequence and DSSP features
 
     def match_dssp(seq, dssp, ref_seq):
-        alignments = pairwise2.align.globalxx(ref_seq, seq)  # 对齐参考序列和 DSSP 序列
-        ref_seq = alignments[0].seqA  # 获取对齐后的参考序列
-        seq = alignments[0].seqB  # 获取对齐后的 DSSP 序列
+        alignments = pairwise2.align.globalxx(ref_seq, seq)  
+        ref_seq = alignments[0].seqA  
+        seq = alignments[0].seqB  
 
-        SS_vec = np.zeros(9)  # 定义缺失的二级结构向量
+        SS_vec = np.zeros(9)  
         SS_vec[-1] = 1
-        padded_item = np.concatenate((np.array([360, 360, 0]), SS_vec))  # 填充缺失项
+        padded_item = np.concatenate((np.array([360, 360, 0]), SS_vec))  
 
-        new_dssp = []  # 初始化填充后的 DSSP 特征列表
+        new_dssp = [] 
         for aa in seq:
-            if aa == "-":  # 如果是 DSSP 序列中的 gap
-                new_dssp.append(padded_item)  # 添加填充项
+            if aa == "-": 
+                new_dssp.append(padded_item) 
             else:
-                new_dssp.append(dssp.pop(0))  # 否则添加 DSSP 特征
+                new_dssp.append(dssp.pop(0))
 
-        matched_dssp = []  # 初始化匹配的 DSSP 特征列表
+        matched_dssp = []  
         for i in range(len(ref_seq)):
-            if ref_seq[i] == "-":  # 跳过参考序列中的 gap
+            if ref_seq[i] == "-": 
                 continue
-            # 确保填充对应的是 ref_seq 中非 gap 的位置
             matched_dssp.append(new_dssp[i])
 
-        return new_dssp  # 返回匹配后的 DSSP 特征
+        return new_dssp 
 
     def transform_dssp(dssp_feature):
         dssp_feature = np.array(dssp_feature)  # Convert DSSP features to NumPy array
@@ -83,7 +82,7 @@ def get_dssp(fasta_file, pdb_path):
             dssp_file = pdb_path + ".dssp"
             os.system(f"{DSSP} -i {pdb_path} -o {dssp_file}")  # Run DSSP to generate DSSP file
 
-            if not os.path.exists(dssp_file):  # 检查 DSSP 文件是否生成
+            if not os.path.exists(dssp_file):  
                 print(f"DSSP file not generated for {pdb_path}, skipping...")
                 return None
 
@@ -123,7 +122,6 @@ def get_dssp(fasta_file, pdb_path):
 
     if fault_name != []:  # If there are any faults
         print(f"Faulty sequences: {fault_name}")  # Print the faulty sequence names
-    # 处理完所有文件后，可以输出未成功生成 DSSP 文件的列表
 
     return dssp_tensors  # Return all DSSP tensors
 
