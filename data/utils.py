@@ -14,52 +14,6 @@ from biopandas.pdb import PandasPdb
 from typing import List, Union
 from sklearn.metrics.pairwise import euclidean_distances
 from torch.utils.data import Dataset
-os.environ['DSSP'] = '/usr/bin/dssp'
-
-
-def run_dssp(pdb_file: str) -> pd.DataFrame:
-    """Run biopython DSSP for SS8(3), RASA Angle(Phi, Phi)"""
-    pdb_name = pdb_file.split('/')[-1].split('.')[0]
-    p = PDBParser()
-
-    # Set DSSP executable path explicitly if needed
-    dssp_path = os.environ.get('DSSP', '/usr/bin/dssp')
-    if not os.path.exists(dssp_path):
-        raise FileNotFoundError(f"DSSP executable not found at {dssp_path}")
-
-    structure = p.get_structure(pdb_name, pdb_file)
-    model = structure[0]
-
-    dssp = DSSP(model, pdb_file)
-    key_list = list(dssp.keys())
-    ss8_list = []
-    rasa_list = []
-    phi_list = []
-    psi_list = []
-
-    for key in key_list:
-        try:
-            ss8 = dssp[key][2]  # 二级结构类型，STRUCTURE
-            rasa = dssp[key][3]  # 溶剂可及度，ACC
-            phi = dssp[key][4]  # PHI 角度
-            psi = dssp[key][5]  # PSI 角度
-            if ss8 not in ['H', 'E', 'C', 'G', 'I', 'B', 'T', 'S']:  # 检查 ss8 是否有效
-                ss8 = '-'
-            ss8_list.append(ss8)
-            rasa_list.append(rasa)
-            phi_list.append(phi)
-            psi_list.append(psi)
-        except KeyError as e:
-            # 在出错时可以选择添加默认值
-            ss8_list.append('-')
-            rasa_list.append(None)
-            phi_list.append(None)
-            psi_list.append(None)
-
-    feature_df = pd.DataFrame(list(zip(ss8_list, rasa_list, phi_list, psi_list)),
-                              columns=['ss8', 'rasa', 'phi', 'psi'])
-
-    return feature_df
 
 
 def laplacian_positional_encoding(g: dgl.DGLGraph, pos_enc_dim: int) -> torch.Tensor:
@@ -292,27 +246,3 @@ def distance_helper(pdb_file: str, pdb_name: str,
         return real_dist
 
 
-class TestData(Dataset):
-    """Data loader"""
-    def __init__(self, dgl_folder: str):
-        self.data_list = os.listdir(dgl_folder)
-        self.data_list = [os.path.join(dgl_folder, i) for i in self.data_list]
-        self.data = []
-        self._prepare()
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        return self.data[idx]
-
-    def _prepare(self):
-        for i in range(len(self.data_list)):
-            g, tmp = dgl.data.utils.load_graphs(self.data_list[i])
-            self.data.append(g[0])
-
-
-def collate(samples) -> dgl.DGLGraph:
-    """Customer collate function"""
-    batched_graph = dgl.batch(samples)
-    return batched_graph
