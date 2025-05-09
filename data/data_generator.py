@@ -87,7 +87,6 @@ def generate_tri_d(pdb_file):
         l=L,
     )[0, :, -1, :]
     tri = tri_location_D(cb_d, cb_coords.numpy())
-
     return tri
 
 
