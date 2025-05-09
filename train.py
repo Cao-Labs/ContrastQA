@@ -586,7 +586,7 @@ checkpoint_callback = ModelCheckpoint(
     filename='{epoch}-{val_loss:.5f}',  
     monitor='val_loss',  
     save_top_k=3, 
-    mode='min',  # 
+    mode='min', 
     save_weights_only=True, 
     verbose=True  
 )
