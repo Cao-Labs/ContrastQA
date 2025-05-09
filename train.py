@@ -13,18 +13,17 @@ from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, St
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from torch import optim, nn
 from torch.utils.data import DataLoader
-from dataset import MLPReadoutlddtClass, MLPReadoutlddtClassV2, GCLDGLDataset
-# 定义参数
+from dataset import MLPReadoutlddtClass, GCLDGLDataset
 from GVP_GNN import GVPConvLayer, _normalize, LayerNorm, GVP
 from model.utils import log
 
 CUDA_LAUNCH_BLOCKING = 1
 
-# 加载 config.json
-with open('./config/config_gvp_gcl_v1.json', 'r') as f:
+# load config.json
+with open('./config/pre_train_knn10_seed42.json', 'r') as f:
     config = json.load(f)
 
-# 使用参数
+# parameter
 _version = config['version']
 _init_lr = config["init_lr"]
 _weight_decay = config["weight_decay"]
@@ -53,15 +52,14 @@ _gvp_num_layer = config["gvp_num_layer"]
 
 print(f"Training with version: {_version}, learning rate: {_init_lr}")
 
-# 设置日志和检查点保存目录
-_wb_out_dir = './logs/GVP_GCL_v1'
+# logging file & weight save path
+_wb_out_dir = './logs/trainwb'
 _ckpt_out_dir = './checkpoints/'
 
-# 确保输出目录存在
 os.makedirs(_wb_out_dir, exist_ok=True)
 os.makedirs(_ckpt_out_dir, exist_ok=True)
 
-# 设定当前时间
+# time
 now = datetime.now()
 _CURRENT_TIME = now.strftime("%Y-%m-%d_%H-%M-%S")
 
@@ -122,12 +120,12 @@ class QAModel(pl.LightningModule):
                 activations=(None, None), vector_gate=True)
         )
 
-        # GVPConvLayer 参数
+        # GVPConvLayer parameter
         self.gvp = nn.ModuleList(GVPConvLayer(
-            node_dims=self.node_hidden_dim,  # 节点特征维度
-            edge_dims=(self.edge_scalar_feature_dim, self.edge_vector_feature_dim),  # 边特征维度
-            activations=(F.relu, None),  # 激活函数（标量，矢量）
-            vector_gate=True  # 是否使用矢量门控
+            node_dims=self.node_hidden_dim,  # node feature dimension
+            edge_dims=(self.edge_scalar_feature_dim, self.edge_vector_feature_dim),  # edge feature dimension
+            activations=(F.relu, None),  # act(scalars, vectors)
+            vector_gate=True  # vector gate 
         ) for _ in range(_gvp_num_layer))
 
         ns, _ = (
@@ -144,82 +142,69 @@ class QAModel(pl.LightningModule):
             nn.Dropout(p=0.1),  # Add a Dropout layer
         )
 
-        self.mlp_readout = MLPReadoutlddtClassV2(input_dim=self.node_out_dim, output_dim=1, dp_rate=_mlp_dp_rate)
+        self.mlp_readout = MLPReadoutlddtClass(input_dim=self.node_out_dim, output_dim=1, dp_rate=_mlp_dp_rate)
 
-        # 初始化保存每个指标的列表
-        self.train_losses = []  # 每个 epoch 的训练损失
-        self.val_losses = []  # 每个 epoch 的验证损失
+        # save losses
+        self.train_losses = []  
+        self.val_losses = []  
 
-        self.train_mse = []  # 每个 epoch 的训练 MSE
-        self.train_ce = []  # 每个 epoch 的训练 CE
-        self.train_cl_loss = []  # 每个 epoch 的训练对比损失
-        self.train_acc = []  # 每个 epoch 的训练准确率
-        self.val_mse = []  # 每个 epoch 的验证 MSE
-        self.val_ce = []  # 每个 epoch 的验证 CE
-        self.val_cl_loss = []  # 每个 epoch 的验证对比损失
-        self.val_acc = []  # 每个 epoch 的验证准确率
+        self.train_mse = []  # training MSE
+        self.train_ce = []  # training CE
+        self.train_cl_loss = []  # training contrast loss
+        self.train_acc = []  # training acc
+        self.val_mse = []  # val MSE
+        self.val_ce = []  # val CE
+        self.val_cl_loss = []  # val contrast loss
+        self.val_acc = []  # val acc
 
     def nt_xent_loss(self, anchor, positive, negatives, anchor_score, neg_scores, anchor_target, neg_targets,
                      temperature=0.07):
         """
-        计算基于标签权重的 NT-Xent 对比损失。
+        caculate NT-Xent contrast loss based on label weight.
 
-        :param anchor: 主样本嵌入
-        :param positive: 正样本嵌入
-        :param negatives: 负样本嵌入 (list)
-        :param neg_scores: 负样本对应的 DockQ 分数 (list)
-        :param anchor_score: 主样本的 DockQ 分数
-        :param neg_targets: 负样本对应的 target 名称 (list)
-        :param anchor_target: 主样本的 target 名称
-        :param temperature: 温度参数
-        :return: 计算出的对比损失
+        :param anchor: anchor embedding
+        :param positive: positive embedding
+        :param negatives: negative embedding (list)
+        :param neg_scores:  DockQ score corresponding to negative samples (list)
+        :param anchor_score: DockQ score corresponding to anchor sample
+        :param neg_targets: target name of negative samples(list)
+        :param anchor_target: target name of anchor sample
+        :param temperature: temperature
+        :return: contrast loss
         """
 
-        # 计算主样本与正样本的相似度
+        # similarity between anchor and positive samples
         pos_similarity = torch.exp(torch.cosine_similarity(anchor, positive) / temperature)
 
         neg_similarities = []
         neg_weights = []
 
         for negative, neg_score, neg_target in zip(negatives, neg_scores, neg_targets):
-            # 计算负样本相似度
+            # similarity between anchor and negative samples
             neg_similarity = torch.exp(torch.cosine_similarity(anchor, negative) / temperature)
             neg_similarities.append(neg_similarity)
 
-            # 计算权重：同一 target 下用分数差值，不同 target 设为 1
+            # weight calculating：score difference under the same target ，different targets setting to 1
             weight = torch.abs(anchor_score - neg_score) if neg_target == anchor_target else torch.ones_like(
                 anchor_score)
             weight = weight.squeeze()
             neg_weights.append(weight)
 
-        # 堆叠所有负样本相似度 & 权重
+        # stack all negative similarities & weights
         neg_similarities = torch.stack(neg_similarities)  # (num_negatives,)
         neg_weights = torch.stack(neg_weights)  # (num_negatives,)
 
-        # 计算加权负样本相似度之和
         weighted_neg_sum = (neg_similarities * neg_weights).sum(dim=0)
 
-        # 计算损失
+        # loss calculate
         loss = -torch.log(pos_similarity / (pos_similarity + weighted_neg_sum)).mean()
 
         return loss
 
     def forward(self, anchor_graph, positive_graph, negative_graphs, anchor_score, neg_scores, anchor_target,
                 neg_targets, scatter_mean=True, dense=True):
-        """
-        前向传播方法，分别处理主样本、正样本和多个负样本图。
-        :param neg_targets:
-        :param anchor_target:
-        :param neg_scores:
-        :param anchor_score:
-        :param anchor_graph: 主样本图
-        :param positive_graph: 正样本图
-        :param negative_graphs: 负样本图列表
-        :param dense:
-        :param scatter_mean:
-        :return: 主样本嵌入、正样本嵌入、负样本嵌入和对比损失
-        """
-        # 主样本嵌入
+
+        # anchor embedding
         anchor_h = anchor_graph.ndata['feat'].to(self.device).float()
         anchor_x = anchor_graph.ndata['coords'].to(self.device).float()
         anchor_o = anchor_graph.ndata['ori'].to(self.device).float()
@@ -235,9 +220,9 @@ class QAModel(pl.LightningModule):
         anchor_edge_inputs = (anchor_e, anchor_edge_vectors_normalized)
         anchor_edge_inputs = self.W_e(anchor_edge_inputs)  # Process edge features using the GVP layer
         anchor_node_inputs = self.W_v(anchor_h)  # Process node features using the GVP layer
-        # 添加残差连接
+        # residual connection
         tensor1, tensor2 = anchor_node_inputs
-        tensor2 = tensor2 + anchor_o  # 将 ori 加到 tensor2 上
+        tensor2 = tensor2 + anchor_o  # add ori feature to tensor2 
         anchor_node_inputs = (tensor1, tensor2)
 
         for layer in self.gvp:
@@ -245,7 +230,7 @@ class QAModel(pl.LightningModule):
         anchor = self.W_out(anchor_node_inputs)
         anchor_z = self.dense(anchor)
 
-        # 正样本嵌入
+        # positive embedding
         positive_h = positive_graph.ndata['feat'].to(self.device).float()
         positive_x = positive_graph.ndata['coords'].to(self.device).float()
         positive_o = positive_graph.ndata['ori'].to(self.device).float()
@@ -262,16 +247,15 @@ class QAModel(pl.LightningModule):
         positive_edge_inputs = (positive_e, positive_edge_vectors_normalized)
         positive_edge_inputs = self.W_e(positive_edge_inputs)
         positive_node_inputs = self.W_v(positive_h)
-        # 添加残差连接
         tensor1, tensor2 = positive_node_inputs
-        tensor2 = tensor2 + positive_o  # 将 x 加到 tensor2 上
+        tensor2 = tensor2 + positive_o  
         positive_node_inputs = (tensor1, tensor2)
         for layer in self.gvp:
             positive_node_inputs = layer(positive_node_inputs, positive_edge_index, positive_edge_inputs)
         positive = self.W_out(positive_node_inputs)
         positive_z = self.dense(positive)
 
-        # 负样本嵌入
+        # negatives embedding
         negative_zs = []
         for negative_graph in negative_graphs:
             negative_h = negative_graph.ndata['feat'].to(self.device).float()
@@ -290,9 +274,8 @@ class QAModel(pl.LightningModule):
             negative_edge_inputs = (negative_e, negative_edge_vectors_normalized)
             negative_edge_inputs = self.W_e(negative_edge_inputs)
             negative_node_inputs = self.W_v(negative_h)
-            # 添加残差连接
             tensor1, tensor2 = negative_node_inputs
-            tensor2 = tensor2 + negative_o  # 将 x 加到 tensor2 上
+            tensor2 = tensor2 + negative_o  
             negative_node_inputs = (tensor1, tensor2)
             for layer in self.gvp:
                 negative_node_inputs = layer(negative_node_inputs, negative_edge_index, negative_edge_inputs)
@@ -300,25 +283,25 @@ class QAModel(pl.LightningModule):
             negative_z = self.dense(negative)
             negative_zs.append(negative_z)
 
-        # 主样本图级嵌入
+        # anchor graph pooling
         anchor_graph.ndata['feat'] = anchor_z
         anchor_zg = dgl.mean_nodes(anchor_graph, 'feat')
-        # 正样本图级嵌入
+        # positive graph pooling
         positive_graph.ndata['feat'] = positive_z
         positive_zg = dgl.mean_nodes(positive_graph, 'feat')
-        # 负样本图级嵌入
+        # negatives graph pooling
         negative_zgs = []
         for negative_graph, negative_z in zip(negative_graphs, negative_zs):
             negative_graph.ndata['feat'] = negative_z
             negative_zg = dgl.mean_nodes(negative_graph, 'feat')
             negative_zgs.append(negative_zg)
 
-        # 计算对比损失
+        # contrast loss
         contrast_loss = self.nt_xent_loss(anchor_zg, positive_zg, negative_zgs,
                                           anchor_score, neg_scores, anchor_target, neg_targets)
 
-        # 通过MLP层（多层感知机）进行最终预测
-        x, y_level = self.mlp_readout(anchor_zg)  # 期望 pred_lddt 形状为 [batch_size, 1]
+        # score return
+        x, y_level = self.mlp_readout(anchor_zg) 
         pred_lddt = x
         pred_lddt_level = y_level
 
@@ -359,14 +342,14 @@ class QAModel(pl.LightningModule):
 
     def training_step(self, train_batch, batch_idx):
 
-        # 从 DGL 图中提取节点特征、坐标和目标
+        # input
         anchor_graph, lddt_scores, lddt_level, dockq_scores, anchor_target, \
         positive_graph, negative_graphs, neg_dockq_scores, neg_targets = train_batch
 
-        # 获取 batch 信息
-        batch_size = anchor_graph.batch_size  # 获取批次大小
+        # batch information
+        batch_size = anchor_graph.batch_size  # batchsize
 
-        # 模型前向传播
+        # model forward 
         pred_lddt, pred_lddt_level, train_contrast_loss = self.forward(anchor_graph, positive_graph, negative_graphs,
                                                                        dockq_scores, neg_dockq_scores,
                                                                        anchor_target, neg_targets)
@@ -387,11 +370,11 @@ class QAModel(pl.LightningModule):
         # cl loss
         train_contrast_loss *= self.cl_weight
 
-        # 最终损失是 lddt 损失和对比损失的加权和
+        # total loss
         total_loss = train_mse + train_ce + train_contrast_loss
         train_loss = total_loss
 
-        # 记录训练指标
+        # log training metrics
         self.train_losses.append(train_loss.item())
         self.train_mse.append(train_mse.item())
         self.train_ce.append(train_ce.item())
@@ -404,7 +387,6 @@ class QAModel(pl.LightningModule):
         self.log('train_acc', train_acc, on_step=False, on_epoch=True, sync_dist=True, batch_size=_batch_size)
         self.log('train_loss', train_loss, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
 
-        # 使用 wandb 记录指标
         wandb.log({
             'train_loss': train_loss.item(),
             'train_mse': train_mse.item(),
@@ -414,23 +396,19 @@ class QAModel(pl.LightningModule):
             'epoch': self.current_epoch
         })
 
-        # 输出训练进度和损失值，每隔50个batch输出一次
-        if batch_idx % 100 == 0:
-            log(f"{batch_idx}/{self.current_epoch} train_epoch ||| Loss: {round(float(train_loss), 6)}")
-
         return train_loss
 
     def validation_step(self, val_batch, batch_idx):
 
-        # 从 DGL 图中提取节点特征、坐标和目标
+        # input
         anchor_graph, lddt_scores, lddt_level, dockq_scores, anchor_target, \
         positive_graph, negative_graphs, neg_dockq_scores, neg_targets = val_batch
         # print(f"val_batch: {val_batch}")
 
-        # 获取 batch 信息
-        batch_size = anchor_graph.batch_size  # 获取批次大小
+        # batch information
+        batch_size = anchor_graph.batch_size  # batchsize
 
-        # 模型前向传播
+        # model forward
         pred_lddt, pred_lddt_level, val_contrast_loss = self.forward(anchor_graph, positive_graph, negative_graphs,
                                                                      dockq_scores, neg_dockq_scores,
                                                                      anchor_target, neg_targets)
@@ -451,21 +429,17 @@ class QAModel(pl.LightningModule):
         # cl loss
         val_contrast_loss *= self.cl_weight
 
-        # 最终损失是 lddt 损失和对比损失的加权和
+        # total loss
         total_loss = val_mse + val_ce + val_contrast_loss
 
         val_loss = total_loss
 
-        # 记录每个 batch 的验证数据
+        # log val metrics
         self.val_losses.append(val_loss.item())
         self.val_mse.append(val_mse.item())
         self.val_ce.append(val_ce.item())
         self.val_cl_loss.append(val_contrast_loss.item())
         self.val_acc.append(val_acc.item())
-
-        # 每隔 50 个 batch 输出一次损失
-        if batch_idx % 50 == 0:
-            print(f"Step {batch_idx}: lDDT Loss: {val_loss.item()}")
 
         # log
         self.log('val_cl_loss', val_contrast_loss, on_step=False, on_epoch=True, sync_dist=True,
@@ -473,7 +447,6 @@ class QAModel(pl.LightningModule):
         self.log('val_acc', val_acc, on_step=False, on_epoch=True, sync_dist=True, batch_size=_batch_size)
         self.log('val_loss', val_loss, on_step=False, on_epoch=True, sync_dist=True, batch_size=batch_size)
 
-        # 使用 wandb 记录指标
         wandb.log({
             'val_loss': val_loss.item(),
             'val_mse': val_mse.item(),
@@ -487,7 +460,7 @@ class QAModel(pl.LightningModule):
 
     def on_train_end(self):
         print("Training is finished. Saving losses...")
-        # 在训练结束时保存损失列表
+        # save losses json file
         save_path = r"../data/temp_out/losses/losses_gvp_gcl_lddt_v1.json"
 
         losses_dict = {
@@ -503,18 +476,17 @@ class QAModel(pl.LightningModule):
             "val_acc": self.val_acc
         }
 
-        # 使用 json.dump 保存数据到文件
         with open(save_path, 'w') as f:
-            json.dump(losses_dict, f, indent=2)  # 使用 indent=2 格式化输出，以便更易读
+            json.dump(losses_dict, f, indent=2) 
 
-        print(f"训练和验证损失保存到 {save_path}")
+        print(f"training and validation losses are saved to {save_path}")
 
 
 def collate_fn(batch):
     """
-    自定义 collate_fn，用于处理包含主样本、正样本和负样本的 batch 数据。
+    defined collate_fn，process batch data including anchor, positive and negatives.
     """
-    # 定义 lDDT level 字符串到整数的映射
+    # define lDDT level mapping
     level_mapping = {
         "very low": 0,
         "low": 1,
@@ -522,71 +494,66 @@ def collate_fn(batch):
         "very high": 3
     }
 
-    # 解压批次数据
+    # batch data
     (graphs, lddt_scores, lddt_level, dockq_scores, target_name,
      positive_graph, pos_dockq_score, pos_target,
      negative_graphs, neg_dockq_scores, neg_targets) = zip(*batch)
 
-    # 将 lDDT level 字符串转换为整数
     lddt_level_int = [level_mapping[level] for level in lddt_level]
-    lddt_level_int = [int(i) for i in lddt_level_int]  # 确保每个元素都是整数
+    lddt_level_int = [int(i) for i in lddt_level_int]  
 
-    # Step 2: 处理主样本
+    # Step 2: process anchor
     batched_graph = dgl.batch(graphs)
     batched_lddt_scores = torch.tensor(np.array(lddt_scores)).unsqueeze(1)
-    batched_dockq_scores = torch.tensor(np.array(dockq_scores)).unsqueeze(1)  # 主样本 DockQ 分数
+    batched_dockq_scores = torch.tensor(np.array(dockq_scores)).unsqueeze(1)  
 
-    # Step 3: 处理正样本
+    # Step 3: process positive
     batched_positive_graph = dgl.batch(positive_graph)
-    batched_pos_dockq_score = torch.tensor(np.array(pos_dockq_score)).unsqueeze(1)  # 正样本 DockQ 分数
+    batched_pos_dockq_score = torch.tensor(np.array(pos_dockq_score)).unsqueeze(1)  
 
-    # Step 4: 处理负样本
+    # Step 4: process negatives
     batched_negative_graphs = [neg_graph for neg_list in negative_graphs for neg_graph in neg_list]
-    batched_neg_dockq_scores = [score for neg_list in neg_dockq_scores for score in neg_list]  # 负样本 DockQ 分数
-    batched_neg_targets = [tgt for neg_list in neg_targets for tgt in neg_list]  # 负样本 target
+    batched_neg_dockq_scores = [score for neg_list in neg_dockq_scores for score in neg_list]  
+    batched_neg_targets = [tgt for neg_list in neg_targets for tgt in neg_list] 
 
-    # Step 5: 转换 lDDT level 为张量
+    # Step 5: transform lDDT level to tensor
     batched_lddt_level = torch.tensor(lddt_level_int, dtype=torch.long).unsqueeze(1)
 
-    # 返回批次数据
+    # return batch data
     return (
-        batched_graph, batched_lddt_scores, batched_lddt_level, batched_dockq_scores, target_name,  # 主样本
-        batched_positive_graph,  # 正样本
-        batched_negative_graphs, batched_neg_dockq_scores, batched_neg_targets  # 负样本
+        batched_graph, batched_lddt_scores, batched_lddt_level, batched_dockq_scores, target_name,  # anchor
+        batched_positive_graph,  # positive
+        batched_negative_graphs, batched_neg_dockq_scores, batched_neg_targets  # negatives
     )
 
 
 def load_dataset_from_txt(trainset_path, valset_path):
-    # 读取训练集文件名
+    # read training dataset
     with open(trainset_path, 'r') as train_f:
         train_files = [line.strip() for line in train_f.readlines()]
 
-    # 读取验证集文件名
+    # read val dataset
     with open(valset_path, 'r') as val_f:
         val_files = [line.strip() for line in val_f.readlines()]
 
     return train_files, val_files
 
 
-# 创建数据集
-data_folder = r'../data/temp_out/DGL/Final_DGL'  # 替换为实际的数据集文件夹路径
-lddt_csv = r'../data/data/train/Final_1_gcl_lddt.csv'
-dockq_csv = r'../data/data/train/Final_1_gcl_dockq.csv'
+data_folder = r'path/to/DGL'  # replace your dataset path
+lddt_csv = r'path/to/lddt.csv'
+dockq_csv = r'path/to/dockq.csv'
 
-# 划分训练集和验证集
-train_files, val_files = load_dataset_from_txt('../data/data/dataset_txt/trainset_tmp.txt',
-                                               '../data/data/dataset_txt/valset_tmp.txt')
+train_files, val_files = load_dataset_from_txt('path/to/trainset.txt',
+                                               'path/to/valset.txt')
 
-# 加载训练集和验证集
 train_dataset = GCLDGLDataset(data_folder, lddt_csv, dockq_csv, file_list=train_files)
 val_dataset = GCLDGLDataset(data_folder, lddt_csv, dockq_csv, file_list=val_files)
 
-# 定义 DataLoader
 train_loader = DataLoader(train_dataset, batch_size=_batch_size, num_workers=4, persistent_workers=True,
                           shuffle=True, pin_memory=True, collate_fn=collate_fn)
 val_loader = DataLoader(val_dataset, batch_size=_batch_size, num_workers=4, pin_memory=True, collate_fn=collate_fn)
 
-model = QAModel().to('cuda')  # 显式地将模型移动到 GPU
+model = QAModel().to('cuda')
 
 
 def init_weights(m):
@@ -598,7 +565,7 @@ model.apply(init_weights)
 
 
 # logger
-wandb_logger = WandbLogger(project="GVP_GCL_QA",
+wandb_logger = WandbLogger(project="QA",
                            name=_version,
                            id=_CURRENT_TIME,
                            offline=False,
@@ -616,12 +583,12 @@ lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
 checkpoint_callback = ModelCheckpoint(
     dirpath=os.path.join(_ckpt_out_dir, _version),
-    filename='{epoch}-{val_loss:.5f}',  # 验证损失应该自动由 val_loss 提供
-    monitor='val_loss',  # 监控验证损失
-    save_top_k=3,  # 只保存最好的三个模型
-    mode='min',  # 最小化损失
-    save_weights_only=True,  # 仅保存权重
-    verbose=True  # 显示详细保存信息
+    filename='{epoch}-{val_loss:.5f}',  
+    monitor='val_loss',  
+    save_top_k=3, 
+    mode='min',  # 
+    save_weights_only=True, 
+    verbose=True  
 )
 
 saw = StochasticWeightAveraging(swa_epoch_start=0.7,
@@ -632,10 +599,10 @@ saw = StochasticWeightAveraging(swa_epoch_start=0.7,
 # define a trainer
 trainer = pl.Trainer(
     accelerator='gpu',
-    devices=1,  # 使用单个GPU
+    devices=1,  
     num_nodes=1,
     max_epochs=_epochs,
-    logger=wandb_logger,  # 设置为 None，禁用任何日志记录
+    logger=wandb_logger,  
     callbacks=[early_stop_callback, checkpoint_callback, lr_monitor, saw],
     sync_batchnorm=True,
     accumulate_grad_batches=_accumulate_grad_batches
