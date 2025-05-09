@@ -88,38 +88,6 @@ def process_model(
     return temp_coords, temp_mask
 
 
-def laplacian_positional_encoding(g: dgl.DGLGraph, pos_enc_dim: int) -> torch.Tensor:
-    """
-    Graph positional encoding via Laplacian eigenvectors
-    :return torch.Tensor (L, pos_enc_dim)
-    """
-
-    # 获取邻接矩阵的稀疏表示
-    A = g.adjacency_matrix()  # 默认获取稀疏矩阵
-    A = A.coalesce()  # 获取稀疏矩阵的非零元素
-
-    # 获取稀疏矩阵的索引和值
-    indices = A.indices()  # 获取稀疏矩阵的索引
-    values = A.values() # 获取稀疏矩阵的非零值
-
-    # 将稀疏矩阵转换为密集矩阵
-    A_dense = torch.sparse_coo_tensor(indices, values, A.shape).to_dense()
-
-    # 计算度矩阵的逆平方根
-    in_degrees = g.in_degrees().float()  # 获取每个节点的入度
-    N = torch.diag(1.0 / torch.sqrt(in_degrees))  # 逆平方根
-    L = torch.eye(g.number_of_nodes()) - torch.matmul(torch.matmul(N, A_dense), N)  # 计算拉普拉斯矩阵
-
-    # 计算拉普拉斯矩阵的特征值和特征向量
-    EigVal, EigVec = np.linalg.eig(L.numpy())
-    idx = EigVal.argsort()  # 按特征值排序
-    EigVal, EigVec = EigVal[idx], np.real(EigVec[:, idx])
-
-    # 提取前 pos_enc_dim 个特征向量
-    laplacian_feature = torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1]).float().reshape(-1, pos_enc_dim)
-    return laplacian_feature
-
-
 def edge_positional_embeddings(self, edge_index,
                            num_embeddings=None,
                            period_range=[2, 1000]):
