@@ -14,19 +14,13 @@ from joblib import Parallel, delayed
 from typing import List
 from sklearn.metrics.pairwise import euclidean_distances
 from sklearn.preprocessing import MinMaxScaler
-
 import dgl
 import torch
-
-# 将项目根目录加入到 sys.path 中
-
-sys.path.append('/mnt/d/pycharm/pycharmProjects/ideamodel3qa')
-# from src.clean_pipe import clean_pipe
-from data.dproq_feature.utils import pdb2fasta, run_dssp, laplacian_positional_encoding, \
+from data.utils import pdb2fasta, run_dssp, laplacian_positional_encoding, \
     ss3_one_hot, sequence_one_hot, pdb2graph_new_chain_info, update_node_feature, update_edge_feature
-from data.utils.tri_D import tri_location_D
-from data.utils.util import get_distmaps, process_model, AA_to_tip, edge_positional_embeddings, orientations
-from data.dproq_feature.dssp import get_dssp
+from data.tri_D import tri_location_D
+from data.util import get_distmaps, process_model, AA_to_tip, edge_positional_embeddings, orientations
+from data.dssp import get_dssp
 
 
 def filter_atoms(test_df: pd.DataFrame, atom_type: str) -> pd.DataFrame:
