@@ -13,8 +13,8 @@ from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, St
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from torch import optim, nn
 from torch.utils.data import DataLoader
-from dataset import MLPReadoutlddtClass, GCLDGLDataset
-from GVP_GNN import GVPConvLayer, _normalize, LayerNorm, GVP
+from model.dataset import MLPReadoutlddtClass, GCLDGLDataset
+from model.GVP_GNN import GVPConvLayer, _normalize, LayerNorm, GVP
 from model.utils import log
 
 CUDA_LAUNCH_BLOCKING = 1
