@@ -1,1 +1,0 @@
-first create_json.py generate json file, then save_pkl.py generate pkl file, finally save_dgl.py with data_prepare.py save dgl file
