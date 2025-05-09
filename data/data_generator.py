@@ -1,4 +1,4 @@
-import os
+simport os
 import pickle
 import sys
 from argparse import ArgumentParser
@@ -19,7 +19,7 @@ import torch
 from data.utils import pdb2fasta, run_dssp, laplacian_positional_encoding, \
     ss3_one_hot, sequence_one_hot, pdb2graph_new_chain_info, update_node_feature, update_edge_feature
 from data.tri_D import tri_location_D
-from data.util import get_distmaps, process_model, AA_to_tip, edge_positional_embeddings, orientations
+from data.utils import get_distmaps, process_model, AA_to_tip, edge_positional_embeddings, orientations
 from data.dssp import get_dssp
 
 
