@@ -13,7 +13,7 @@ We propose the ContrastQA method, based on the label-guided graph contrastive le
 git clone https://github.com/Cao-Labs/ContrastQA.git
 cd ContrastQA
 ```
-We use python 3.9.19, pytorch 2.2.1 and pytorch-lightning 2.3.0. We recommend using conda to install the dependencies:
+We use python 3.9.19, pytorch 2.1.2 and pytorch-lightning 2.3.0. We recommend using conda to install the dependencies:
 ```bash
 conda env create -f environment.yml
 ```
