@@ -12,6 +12,9 @@ from model.dataset import MLPReadoutlddtClass
 from model.GVP_GNN import GVPConvLayer, _normalize, LayerNorm, GVP
 
 CUDA_LAUNCH_BLOCKING = 1
+# time
+now = datetime.now()
+_CURRENT_TIME = now.strftime("%Y-%m-%d_%H-%M-%S")
 
 # load config file
 config_file = f'../config/config_gvp_gcl_v1.json'
