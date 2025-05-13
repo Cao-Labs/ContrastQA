@@ -19,7 +19,6 @@ with open(config_file) as f:
     print(f'Loading config file {config_file}')
     config = json.load(f)
 
-# 使用参数
 _version = config['version']
 _init_lr = config["init_lr"]
 _weight_decay = config["weight_decay"]
@@ -47,19 +46,6 @@ _edge_vector_feature_dim = config["edge_vector_feature_dim"]
 _gvp_num_layer = config["gvp_num_layer"]
 
 print(f"Training with dataset: {_dataset}, learning rate: {_init_lr}")
-
-# 设置日志和检查点保存目录
-_wb_out_dir = './logs/GVP_GCL_v1'
-_ckpt_out_dir = './checkpoints/'
-
-# 确保输出目录存在
-os.makedirs(_wb_out_dir, exist_ok=True)
-os.makedirs(_ckpt_out_dir, exist_ok=True)
-
-# 设定当前时间
-now = datetime.now()
-_CURRENT_TIME = now.strftime("%Y-%m-%d_%H-%M-%S")
-
 
 class QAModel(pl.LightningModule):
     def __init__(self):
