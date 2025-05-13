@@ -23,3 +23,21 @@ conda activate ContrastQA
 ```
 You also need to install the relative packages to run ESM-2 protein language model. \
 Please see [facebookresearch/esm](https://github.com/facebookresearch/esm) for details. 
+
+## Dataset
+### Training sets
+We provide datasets for training, including MULTICOM, Voro, and PPI datasets(generated using AF3 and AF2-multimer).
+
+### Testing sets
+We use CASP16, which is available from the CASP official website, and ABAG-AF3, which is available from TopoQA, as our testing datasets.
+
+## Usage
+### Model Training:
+We start by generating the dgl file：
+```bash
+python ./data/data_generator.py
+--input_pdb_folder -p input pdbs folder
+--dgl_save_folder -d dgl files save folder
+--cores  -c number of cores for parallel processing
+```
+
