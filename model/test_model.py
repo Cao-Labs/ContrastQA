@@ -132,7 +132,6 @@ class QAModel(pl.LightningModule):
 
     def nt_xent_loss(self, anchor, positive, negatives, anchor_score, neg_scores, anchor_target, neg_targets,
                      temperature=0.07):
-
         pos_similarity = torch.exp(torch.cosine_similarity(anchor, positive) / temperature)
 
         neg_similarities = []
