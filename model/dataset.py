@@ -263,3 +263,31 @@ class MLPReadoutlddtClass(nn.Module):
         y_pred = torch.sigmoid(self.last_layer(y_class)) # score
 
         return y_pred, y_class
+
+
+class TestData(Dataset):
+    """Data loader"""
+
+    def __init__(self, dgl_folder: str):
+
+        self.file_names = os.listdir(dgl_folder)
+        self.data_list = [os.path.join(dgl_folder, i) for i in self.file_names]
+        self.data = []
+        self._prepare()
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+    def _prepare(self):
+        for i in range(len(self.data_list)):
+            g, tmp = dgl.data.utils.load_graphs(self.data_list[i])
+            self.data.append(g[0])
+
+
+def collate(samples) -> dgl.DGLGraph:
+    """Customer collate function"""
+    batched_graph = dgl.batch(samples)
+    return batched_graph
