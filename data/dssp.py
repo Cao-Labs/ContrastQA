@@ -5,7 +5,7 @@ from Bio import pairwise2
 
 
 def get_dssp(fasta_file, pdb_path):
-    DSSP = '/home/pplion/anaconda3/envs/myqa/bin/dssp'
+    DSSP = '/path/to/dssp'
 
     def process_dssp(dssp_file):
         print(f"Reading DSSP file: {dssp_file}")
