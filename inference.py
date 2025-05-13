@@ -7,10 +7,10 @@ from tqdm import tqdm
 import torch
 from natsort import natsorted
 from torch.utils.data import DataLoader
-from data.dproq_feature.data_generator_v3 import distance_helper_v2, build_protein_graph
-from data.dproq_feature.utils import pdb2fasta
+from data.data_generator import distance_helper_v2, build_protein_graph
+from data.utils import pdb2fasta
 from model.dataset import TestData, collate
-from model.network_gvp_gcl_lddt_v1_dproq_test import QAModel
+from model.test_model import QAModel
 import re
 import sys
 from os.path import join, isdir, isfile
