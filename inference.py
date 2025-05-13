@@ -19,8 +19,8 @@ from timeit import default_timer as timer
 import numpy as np
 import warnings
 import pandas as pd
-from esm_main.generate_embedding.generate_embed_test import generate_embed_pt
-from esm_main.generate_embedding.save_emb_pkl_test import save_esm_emb_pkl
+from esm_main.generate_embedding.generate_embed import generate_embed_pt
+from esm_main.generate_embedding.save_emb_pkl import save_esm_emb_pkl
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
