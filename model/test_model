@@ -8,14 +8,13 @@ from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
 import torchmetrics
-from model.dataset import MLPReadoutlddtClass, MLPReadoutlddtClassV2, MLPReadoutlddtClassV3
-# 定义参数
+from model.dataset import MLPReadoutlddtClass
 from model.GVP_GNN import GVPConvLayer, _normalize, LayerNorm, GVP
 
 CUDA_LAUNCH_BLOCKING = 1
 
 # load config file
-config_file = f'/mnt/d/pycharm/pycharmProjects/ideamodel3qa/model/config/config_gvp_gcl_v1.json'
+config_file = f'../config/config_gvp_gcl_v1.json'
 with open(config_file) as f:
     print(f'Loading config file {config_file}')
     config = json.load(f)
