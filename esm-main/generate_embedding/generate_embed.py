@@ -144,8 +144,8 @@ def generate_embed_pt(input_dir, model_location, output_base_dir):
 
 if __name__ == "__main__":
     # Example usage
-    input_dir = r"D:\pycharm\pycharmProjects\ideamodel3qa\data\data\test\CASP15\test_tmp\H1157_split\chain_C"  # Input directory (can be a single folder or subfolders)
+    input_dir = r"data\test\CASP15\test_tmp\H1157_split\chain_C"  # Input directory (can be a single folder or subfolders)
     model_location = "esm2_t33_650M_UR50D"  # Path to your pretrained model
-    output_base_dir = r"D:\pycharm\pycharmProjects\ideamodel3qa\data\temp_out\CASP15_embedding\H1157_C"  # Output directory to save embeddings
+    output_base_dir = r"data\temp_out\CASP15_embedding\H1157_C"  # Output directory to save embeddings
 
     generate_embed_pt(input_dir, model_location, output_base_dir)
