@@ -41,5 +41,7 @@ python ./data/data_generator.py
 --dgl_save_folder -o dgl files save folder
 --esm_pkl_folder -e input esm pkl folder
 --cores  -c number of cores for parallel processing
-```
 
+# example code
+python ./src/data_generator.py -i /example_pdbs_folder/ -f /example_fasta_folder/ -o /dgl_save_folder -e /example_esm_pkl_folder/ -c 10
+```
