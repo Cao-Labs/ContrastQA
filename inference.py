@@ -177,7 +177,7 @@ def evaluate_QA_results(dgl_input, pathToSave):
     model_list = [i.split('.')[0] for i in model_list]
 
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    ckpt_file = f'model/checkpoints/GVP_GCL_temperature_0.2/epoch=45-val_loss=0.09626.ckpt'
+    ckpt_file = f'pre_train_seed_42.ckpt' # path see readme file
     model = QAModel.load_from_checkpoint(ckpt_file)
     print(f'Loading {ckpt_file}')
     model = model.to(device)
