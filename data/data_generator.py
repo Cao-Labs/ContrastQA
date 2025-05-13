@@ -1,4 +1,4 @@
-simport os
+import os
 import pickle
 import sys
 from argparse import ArgumentParser
@@ -75,7 +75,7 @@ def extract_multi_distance_map(pdb_file):
     return output
 
 
-# tri_d 特征
+# tri_d feature
 def generate_tri_d(pdb_file):
     maps = extract_multi_distance_map(pdb_file)
     cb_d = maps[:, :, 0]
@@ -96,7 +96,6 @@ def load_esm_embeddings(esm_path, pdb_name):
     with open(esm_file_path, 'rb') as f:
         esm_data = pickle.load(f)
 
-    # 直接返回原始的ESM嵌入特征，不进行降维
     return esm_data
 
 
@@ -110,7 +109,6 @@ def load_pdb_ca_coords(pdb_file_path):
 
     structure = parser.get_structure(os.path.basename(pdb_file_path), pdb_file_path)
 
-    # 遍历所有链和残基，提取CA原子坐标
     for model in structure:
         for chain in model:
             for residue in chain:
@@ -125,20 +123,18 @@ def load_pdb_ca_coords(pdb_file_path):
 class ESMMLP(nn.Module):
     def __init__(self):
         super().__init__()
-        self.linear = nn.Linear(1280, 512)  # 纯线性变换
+        self.linear = nn.Linear(1280, 512)  
 
     def forward(self, x):
-        # 输入形状 [N, 1280], 输出 [N, 512]
         return self.linear(x)
 
 
 class NodeFeatureMLP(nn.Module):
     def __init__(self):
         super().__init__()
-        self.linear = nn.Linear(55, 512)  # 纯线性变换
+        self.linear = nn.Linear(55, 512)  
 
     def forward(self, x):
-        # 输入形状 [N, 55], 输出 [N, 512]
         return self.linear(x)
 
 
@@ -178,15 +174,14 @@ def build_protein_graph(pdb_file: str,
     # 4.5 esm embedding feature
     esm_file_path = esm_path
     esm_features = []
-    # 加载ESM嵌入特征
-    if os.path.exists(esm_file_path):  # 确保 ESM 文件存在
+    if os.path.exists(esm_file_path):  
         esm_embeddings = load_esm_embeddings(esm_path, pdb_file)
         for chain, layers in esm_embeddings.items():
             if isinstance(layers, dict):
                 for layer, embedding in layers.items():
-                    # 确保 ESM 嵌入特征的形状一致
+
                     esm_features.append(np.array(embedding))
-            elif isinstance(layers, np.ndarray):  # 如果 layers 是 ndarray，按索引访问
+            elif isinstance(layers, np.ndarray):  
                 for i, embedding in enumerate(layers):
                     esm_features.append(np.array(embedding))
             else:
@@ -195,7 +190,7 @@ def build_protein_graph(pdb_file: str,
         print(f"Warning: ESM embedding file not found for {pdb_file}")
         return None
 
-    esm_features = np.vstack(esm_features)  # 将 ESM 特征合并为一个大数组
+    esm_features = np.vstack(esm_features)  
     esm_features = torch.tensor(esm_features, dtype=torch.float32)
     esmmlp = ESMMLP()
     esm_reduced_features = esmmlp(esm_features)
@@ -204,7 +199,7 @@ def build_protein_graph(pdb_file: str,
     pdb_coords = load_pdb_ca_coords(pdb_file)
     pdb_coords = torch.tensor(pdb_coords, dtype=torch.float32)
 
-    # 4.7 计算方向向量特征
+    # 4.7 orientation feature
     node_ori = orientations(pdb_coords)
     if isinstance(node_ori, torch.Tensor):
         node_ori_tensor = node_ori.clone().detach()
@@ -246,10 +241,8 @@ def build_protein_graph(pdb_file: str,
     nodefeatmlp = NodeFeatureMLP()
     up_node_feature = nodefeatmlp(original_node_feature)  # shape:[N,55] -> [N,512]
     esm_reduced_features = esm_reduced_features.to(up_node_feature.device)
-    # 关键性维度校验
     assert up_node_feature.shape == esm_reduced_features.shape, \
         f"Shape mismatch: {up_node_feature.shape} vs {esm_reduced_features.shape}"
-    # 直接相加
     combined_features = up_node_feature + esm_reduced_features
     g.ndata['feat'] = combined_features
 
@@ -269,7 +262,6 @@ def wrapper(pdb_file: str, fasta_file: str, esm_file: str, dgl_file: str, pdb_id
     print(f"wrapper step Processing PDB file: {pdb_file}")
     dist_matirx_list = distance_helper_v2(pdb_file)
 
-    # 构建蛋白质图并保存为 DGL 文件
     build_protein_graph(pdb_file=pdb_file,
                         fasta_file=fasta_file,
                         model_name=pdb_id,
@@ -297,10 +289,8 @@ if __name__ == '__main__':
         raise FileNotFoundError(f'Please check input pdb folder {input_pdb_folder}')
     input_pdb_folder = os.path.abspath(input_pdb_folder)  # get absolute path
 
-    # 遍历所有子文件夹
     subfolders = natsorted([f.path for f in os.scandir(input_pdb_folder) if f.is_dir()])
 
-    # 遍历每个子文件夹
     for subfolder in subfolders:
         output_folder = os.path.join(subfolder, 'output')
         if os.path.isdir(output_folder):
@@ -309,48 +299,37 @@ if __name__ == '__main__':
             if len(pdbs) == 0:
                 print(f"No PDB files found in {output_folder}")
                 continue
-
-            # 获取对应的 fasta 文件路径
             fasta_folder = os.path.join(args.fasta_folder, f'{os.path.basename(subfolder)}')
-            # 确保 fasta 文件夹存在
+
             if not os.path.exists(fasta_folder):
                 print(f"Warning: fasta folder not found for {fasta_folder}")
                 continue
 
-            # 获取对应的 esm 文件路径
             esm_folder = os.path.join(args.esm_pkl_folder, f'{os.path.basename(subfolder)}_embedding')
-            # 确保 ESM embedding 文件夹存在
             if not os.path.exists(esm_folder):
                 print(f"Warning: ESM embedding folder not found for {esm_folder}")
                 continue
 
-            # 创建对应的 DGL 保存子文件夹
             dgl_subfolder = os.path.join(dgl_save_folder, os.path.basename(subfolder))
             os.makedirs(dgl_subfolder, exist_ok=True)
 
-            # 处理每个 PDB 文件
             for pdb_file in tqdm(pdbs):
-                # 获取 PDB 文件的基名（不带后缀）
                 pdb_base_name = os.path.basename(pdb_file).replace('.pdb', '')
 
-                # 对应的 fasta 文件
                 fasta_file = os.path.join(fasta_folder, f"{pdb_base_name}.fasta")
                 if not os.path.isfile(fasta_file):
                     print(f"Warning: fasta file not found for {pdb_file}")
                     continue
 
-                # 对应的 ESM embedding 文件名
                 esm_pkl_file = os.path.join(esm_folder, f"{pdb_base_name}_emb.pkl")
 
                 if not os.path.isfile(esm_pkl_file):
                     print(f"Warning: ESM embedding file not found for {pdb_file}")
                     continue
 
-                # 生成 DGL 文件保存路径
                 dgl_file_name = f"{pdb_base_name}.dgl"
                 dgl_save_path = os.path.join(dgl_subfolder, dgl_file_name)
 
-                # 如果 ESM 文件存在，则继续处理
                 wrapper(pdb_file, fasta_file, esm_pkl_file, dgl_save_path, pdb_base_name)
 
     print('All done.')
