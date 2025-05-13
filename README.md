@@ -36,8 +36,10 @@ We use CASP16, which is available from the CASP official website, and ABAG-AF3, 
 We start by generating the dgl file：
 ```bash
 python ./data/data_generator.py
---input_pdb_folder -p input pdbs folder
---dgl_save_folder -d dgl files save folder
+--input_pdb_folder -i input pdbs folder
+--fasta_folder -f input fasta folder
+--dgl_save_folder -o dgl files save folder
+--esm_pkl_folder -e input esm pkl folder
 --cores  -c number of cores for parallel processing
 ```
 
