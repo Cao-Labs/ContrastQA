@@ -46,7 +46,7 @@ python ./data/data_generator.py
 python ./src/data_generator.py -i /example_pdbs_folder/ -f /example_fasta_folder/ -o /dgl_save_folder -e /example_esm_pkl_folder/ -c 10
 ```
 ### Model Test:
-ContrastQA requires GPU. We provide few protein complex pdb files for testing, you can use the provided model weight to predict protein complex structures' quality. The evaluation result Ranking.csv is stored in result_folder. We benchmark our model by running inference.py:
+ContrastQA requires GPU. We provide few protein complex pdb files for testing, you can use the provided model weight to predict protein complex structures' quality. The evaluation result Rank_[targetid]_qa.csv is stored in result_folder. We benchmark our model by running inference.py:
 ```bash
 python ./inference.py ./example/7sgm/ ./example/result/7sgm/
 ```
