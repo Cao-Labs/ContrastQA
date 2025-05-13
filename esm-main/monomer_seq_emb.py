@@ -1,3 +1,5 @@
+# we used GraphCPLMQA for generate esm embedding--
+# Liu D, Zhang B, Liu J, et al. Assessing protein model quality based on deep graph coupled networks using protein language model[J]. Briefings in bioinformatics, 2024, 25(1): bbad420.
 #!/usr/bin/env python3 -u
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 #
