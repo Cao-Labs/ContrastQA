@@ -1,7 +1,7 @@
 # ContrastQA: A label-guided graph contrastive learning-based approach for protein complex structure quality assessment
 
 <div align="center">
-  <img src="single_overview.pdf" width="100%"/>
+  <img src="single_overview.png" width="100%"/>
 </div>
 
 We propose the ContrastQA method, based on the label-guided graph contrastive learning framework. ContrastQA devises a novel positive-negative samples pair selection strategy utilizing the interface score label DockQ and also gives a modified contrast loss function to fit this task, which is combined with the geometric graph neural network GVP-GNN for contrastive learning to enhance the model representation and thus improve the global quality assessment of protein complexes. 
