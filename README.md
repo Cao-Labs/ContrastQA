@@ -1,4 +1,4 @@
-# ContrastQA: A Label-guided Graph Contrastive Learning-based approach for protein complex structure quality assessment
+# ContrastQA: A label-guided graph contrastive learning-based approach for protein complex structure quality assessment
 
 <div align="center">
   <img src="Overflow.png" width="100%"/>
