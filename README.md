@@ -26,7 +26,7 @@ Please see [facebookresearch/esm](https://github.com/facebookresearch/esm) for d
 
 ## Dataset
 ### Training sets
-We provide datasets for training, including MULTICOM, Voro, and PPI datasets(generated using AF3 and AF2-multimer). You can download these here:(https://zenodo.org/records/15463235).
+We provide datasets for training, including MULTICOM, Voro, and PPI datasets(generated using AF3 and AF2-multimer). You can download these [here](https://zenodo.org/records/15463235).
 
 ### Testing sets
 We use CASP16, which is available from the CASP official website, and ABAG-AF3, which is available from TopoQA, as our testing datasets.
@@ -45,7 +45,7 @@ python ./data/data_generator.py
 # example code
 python ./src/data_generator.py -i /example_pdbs_folder/ -f /example_fasta_folder/ -o /dgl_save_folder -e /example_esm_pkl_folder/ -c 10
 ```
-You can also use the training weight provided by us which you can download it here:(https://zenodo.org/records/15463235).
+You can also use the pre-training weight provided by us which you can download it [here](https://zenodo.org/records/15463235).
 ### Model Test:
 ContrastQA requires GPU. We provide few protein complex pdb files for testing, you can use the provided model weight to predict protein complex structures' quality. The evaluation result Rank_[targetid]_qa.csv is stored in result_folder. We benchmark our model by running inference.py:
 ```bash
