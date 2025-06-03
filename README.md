@@ -29,7 +29,7 @@ Please see [facebookresearch/esm](https://github.com/facebookresearch/esm) for d
 We provide datasets for training, including MULTICOM, Voro, and PPI datasets(generated using AF3 and AF2-multimer). You can download these [here](https://zenodo.org/records/15463235).
 
 ### Testing sets
-We use CASP16, which is available from the CASP official website, and ABAG-AF3, which is available from TopoQA, as our testing datasets.
+We use CASP16, which is available from [the CASP official website](https://predictioncenter.org/casp16), and ABAG-AF3, which is available from TopoQA, as our testing datasets.
 
 ## Usage
 ### Model Training:
