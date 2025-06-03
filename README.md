@@ -49,7 +49,7 @@ You can also use the pre-training weight provided by us which you can download i
 ### Model Test:
 ContrastQA requires GPU. We provide few protein complex pdb files for testing, you can use the provided model weight to predict protein complex structures' quality. The evaluation result Rank_[targetid]_qa.csv is stored in result_folder. We benchmark our model by running inference.py:
 ```bash
-python ./inference.py ./example/7sgm/ ./example/result/7sgm/
+python ./inference.py ./example/7su1/ ./example/result/7su1/
 ```
 You are free to evaluate your own dataset, which is in the following format:
 ```bash
