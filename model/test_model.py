@@ -17,7 +17,7 @@ now = datetime.now()
 _CURRENT_TIME = now.strftime("%Y-%m-%d_%H-%M-%S")
 
 # load config file
-config_file = f'../config/config_gvp_gcl_v1.json'
+config_file = f'../config/pre_train_knn10_seed42.json'
 with open(config_file) as f:
     print(f'Loading config file {config_file}')
     config = json.load(f)
