@@ -6,7 +6,7 @@ import os
 from copy import deepcopy
 import pandas as pd
 import torch
-from Bio.PDB import PDBParser, DSSP
+from Bio import PDB
 import dgl
 import scipy.sparse as sp
 from scipy.spatial.distance import cdist
