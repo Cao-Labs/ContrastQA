@@ -94,6 +94,19 @@ class QAModel(pl.LightningModule):
 
         pl.seed_everything(_seed)
 
+        # mlp for features
+        self.esmmlp = nn.Sequential(
+            nn.Linear(1280, self.node_input_dim),
+            nn.ReLU(),
+            nn.LayerNorm(self.node_input_dim)
+        )
+
+        self.nodemlp = nn.Sequential(
+            nn.Linear(55, self.node_input_dim),
+            nn.ReLU(),
+            nn.LayerNorm(self.node_input_dim)
+        )
+        
         # model components
         self.mse_weight = _mse_weight
         self.ce_weight = _ce_weight
@@ -208,8 +221,13 @@ class QAModel(pl.LightningModule):
         anchor_h = anchor_graph.ndata['feat'].to(self.device).float()
         anchor_x = anchor_graph.ndata['coords'].to(self.device).float()
         anchor_o = anchor_graph.ndata['ori'].to(self.device).float()
+        anchor_esm = anchor_graph.ndata['esm'].to(self.device).float()
         anchor_e = anchor_graph.edata['feat'].to(self.device).float()
-        anchor_h = self.feat_model(anchor_h)
+
+        anchor_h = self.nodemlp(anchor_h)
+        anchor_esm = self.esmmlp(anchor_esm)
+        anchor_input = anchor_h + anchor_esm
+        anchor_input = self.feat_model(anchor_input)
 
         src_index, dst_index = anchor_graph.edges()
         src_index = src_index.squeeze()
@@ -219,7 +237,7 @@ class QAModel(pl.LightningModule):
         anchor_edge_vectors_normalized = _normalize(anchor_edge_vectors).unsqueeze(-2)  # 变为 [n_edges, 1, 3]
         anchor_edge_inputs = (anchor_e, anchor_edge_vectors_normalized)
         anchor_edge_inputs = self.W_e(anchor_edge_inputs)  # Process edge features using the GVP layer
-        anchor_node_inputs = self.W_v(anchor_h)  # Process node features using the GVP layer
+        anchor_node_inputs = self.W_v(anchor_input)  # Process node features using the GVP layer
         # residual connection
         tensor1, tensor2 = anchor_node_inputs
         tensor2 = tensor2 + anchor_o  # add ori feature to tensor2 
@@ -234,8 +252,13 @@ class QAModel(pl.LightningModule):
         positive_h = positive_graph.ndata['feat'].to(self.device).float()
         positive_x = positive_graph.ndata['coords'].to(self.device).float()
         positive_o = positive_graph.ndata['ori'].to(self.device).float()
+        positive_esm = positive_graph.ndata['esm'].to(self.device).float()
         positive_e = positive_graph.edata['feat'].to(self.device).float()
-        positive_h = self.feat_model(positive_h)
+
+        positive_h = self.nodemlp(positive_h)
+        positive_esm = self.esmmlp(positive_esm)
+        positive_input = positive_h + positive_esm
+        positive_input = self.feat_model(positive_input)
 
         src_index, dst_index = positive_graph.edges()
         src_index = src_index.squeeze()
@@ -246,7 +269,7 @@ class QAModel(pl.LightningModule):
         positive_edge_vectors_normalized = _normalize(positive_edge_vectors).unsqueeze(-2)  # 变为 [n_edges, 1, 3]
         positive_edge_inputs = (positive_e, positive_edge_vectors_normalized)
         positive_edge_inputs = self.W_e(positive_edge_inputs)
-        positive_node_inputs = self.W_v(positive_h)
+        positive_node_inputs = self.W_v(positive_input)
         tensor1, tensor2 = positive_node_inputs
         tensor2 = tensor2 + positive_o  
         positive_node_inputs = (tensor1, tensor2)
@@ -261,8 +284,13 @@ class QAModel(pl.LightningModule):
             negative_h = negative_graph.ndata['feat'].to(self.device).float()
             negative_x = negative_graph.ndata['coords'].to(self.device).float()
             negative_o = negative_graph.ndata['ori'].to(self.device).float()
+            negative_esm = negative_graph.ndata['esm'].to(self.device).float()
             negative_e = negative_graph.edata['feat'].to(self.device).float()
-            negative_h = self.feat_model(negative_h)
+
+            negative_h = self.nodemlp(negative_h)
+            negative_esm = self.esmmlp(negative_esm)
+            negative_input = negative_h + negative_esm
+            negative_input = self.feat_model(negative_input)
 
             src_index, dst_index = negative_graph.edges()
             src_index = src_index.squeeze()
@@ -273,7 +301,7 @@ class QAModel(pl.LightningModule):
             negative_edge_vectors_normalized = _normalize(negative_edge_vectors).unsqueeze(-2)  # 变为 [n_edges, 1, 3]
             negative_edge_inputs = (negative_e, negative_edge_vectors_normalized)
             negative_edge_inputs = self.W_e(negative_edge_inputs)
-            negative_node_inputs = self.W_v(negative_h)
+            negative_node_inputs = self.W_v(negative_input)
             tensor1, tensor2 = negative_node_inputs
             tensor2 = tensor2 + negative_o  
             negative_node_inputs = (tensor1, tensor2)
