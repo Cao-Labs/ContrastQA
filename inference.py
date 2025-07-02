@@ -19,6 +19,7 @@ from timeit import default_timer as timer
 import numpy as np
 import warnings
 import pandas as pd
+# you can change directory esm-main to esm_main
 from esm_main.generate_embedding.generate_embed import generate_embed_pt
 from esm_main.generate_embedding.save_emb_pkl import save_esm_emb_pkl
 
