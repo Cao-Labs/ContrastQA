@@ -126,7 +126,7 @@ def build_protein_graph(pdb_file: str,
                         esm_path: str,
                         out: str,
                         dist_matirx: List[np.ndarray]):
-    """Build KNN graph and assign node and edge features. node feature: N * 512, Edge feature: E * 22"""
+    """Build KNN graph and assign node and edge features. node feature: N * 55, esm feature: N * 1280, Edge feature: E * 22"""
 
     print(f'build protein graph step Processing {model_name}')
     scaler = MinMaxScaler()
