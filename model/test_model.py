@@ -100,7 +100,7 @@ class QAModel(pl.LightningModule):
 
         # model_feature
         self.feat_model = nn.Sequential(
-            nn.Linear(self.node_input_dim, self.node_gvp_input_dim),
+            nn.Linear(2 * self.node_input_dim, self.node_gvp_input_dim),
             nn.ReLU(),
             nn.LayerNorm(self.node_gvp_input_dim)
         )
@@ -179,7 +179,7 @@ class QAModel(pl.LightningModule):
 
         anchor_h = self.nodemlp(anchor_h)
         anchor_esm = self.esmmlp(anchor_esm)
-        anchor_input = anchor_h + anchor_esm
+        anchor_input = torch.cat([anchor_h, anchor_esm], dim=-1)
         anchor_input = self.feat_model(anchor_input)
 
         src_index, dst_index = anchor_graph.edges()
@@ -218,7 +218,7 @@ class QAModel(pl.LightningModule):
             
             positive_h = self.nodemlp(positive_h)
             positive_esm = self.esmmlp(positive_esm)
-            positive_input = positive_h + positive_esm
+            positive_input = torch.cat([positive_h, positive_esm], dim=-1)
             positive_input = self.feat_model(positive_input)
             
             src_index, dst_index = positive_graph.edges()
@@ -249,7 +249,7 @@ class QAModel(pl.LightningModule):
 
                 negative_h = self.nodemlp(negative_h)
                 negative_esm = self.esmmlp(negative_esm)
-                negative_input = negative_h + negative_esm
+                negative_input = torch.cat([negative_h, negative_esm], dim=-1)
                 negative_input = self.feat_model(negative_input)
 
                 src_index, dst_index = negative_graph.edges()
