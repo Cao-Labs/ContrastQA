@@ -1,7 +1,6 @@
 import json
 import os
 from datetime import datetime
-
 import dgl
 import torch
 from torch import nn
@@ -12,12 +11,9 @@ from model.dataset import MLPReadoutlddtClass
 from model.GVP_GNN import GVPConvLayer, _normalize, LayerNorm, GVP
 
 CUDA_LAUNCH_BLOCKING = 1
-# time
-now = datetime.now()
-_CURRENT_TIME = now.strftime("%Y-%m-%d_%H-%M-%S")
 
 # load config file
-config_file = f'../config/pre_train_knn10_seed42.json'
+config_file = f'path/to/pre_train_knn_seed42.json'
 with open(config_file) as f:
     print(f'Loading config file {config_file}')
     config = json.load(f)
@@ -50,6 +46,7 @@ _gvp_num_layer = config["gvp_num_layer"]
 
 print(f"Training with dataset: {_dataset}, learning rate: {_init_lr}")
 
+
 class QAModel(pl.LightningModule):
     def __init__(self):
         super(QAModel, self).__init__()
@@ -67,40 +64,12 @@ class QAModel(pl.LightningModule):
         self.init_lr = _init_lr
         self.weight_decay = _weight_decay
         self.opt = _opt
-        if _criterion == 'mse':
-            print('USE MSE')
-            self.criterion = torchmetrics.MeanSquaredError()
-        elif _criterion == 'mae':
-            print('USE MAE')
-            self.criterion = torchmetrics.MeanAbsoluteError()
-        else:
-            print('DEFAULT IS MSE')
-            self.criterion = torchmetrics.MeanSquaredError()
-        self.criterion_acc = torchmetrics.Accuracy("multiclass", num_classes=4)
 
         pl.seed_everything(_seed)
 
-        # mlp for features
-        self.esmmlp = nn.Sequential(
-            nn.Linear(1280, self.node_input_dim),
-            nn.ReLU(),
-            nn.LayerNorm(self.node_input_dim)
-        )
-
-        self.nodemlp = nn.Sequential(
-            nn.Linear(55, self.node_input_dim),
-            nn.ReLU(),
-            nn.LayerNorm(self.node_input_dim)
-        )
-        
-        # model components
-        self.mse_weight = _mse_weight
-        self.ce_weight = _ce_weight
-        self.cl_weight = _cl_weight
-
         # model_feature
         self.feat_model = nn.Sequential(
-            nn.Linear(2 * self.node_input_dim, self.node_gvp_input_dim),
+            nn.Linear(self.node_input_dim, self.node_gvp_input_dim),
             nn.ReLU(),
             nn.LayerNorm(self.node_gvp_input_dim)
         )
@@ -121,7 +90,7 @@ class QAModel(pl.LightningModule):
 
         # GVPConvLayer 
         self.gvp = nn.ModuleList(GVPConvLayer(
-            node_dims=self.node_hidden_dim, 
+            node_dims=self.node_hidden_dim,  
             edge_dims=(self.edge_scalar_feature_dim, self.edge_vector_feature_dim),  
             activations=(F.relu, None),  
             vector_gate=True 
@@ -145,6 +114,7 @@ class QAModel(pl.LightningModule):
 
     def nt_xent_loss(self, anchor, positive, negatives, anchor_score, neg_scores, anchor_target, neg_targets,
                      temperature=0.07):
+
         pos_similarity = torch.exp(torch.cosine_similarity(anchor, positive) / temperature)
 
         neg_similarities = []
@@ -174,23 +144,19 @@ class QAModel(pl.LightningModule):
         anchor_h = anchor_graph.ndata['feat'].to(self.device).float()
         anchor_x = anchor_graph.ndata['coords'].to(self.device).float()
         anchor_o = anchor_graph.ndata['ori'].to(self.device).float()
-        anchor_esm = anchor_graph.ndata['esm'].to(self.device).float()
         anchor_e = anchor_graph.edata['feat'].to(self.device).float()
-
-        anchor_h = self.nodemlp(anchor_h)
-        anchor_esm = self.esmmlp(anchor_esm)
-        anchor_input = torch.cat([anchor_h, anchor_esm], dim=-1)
-        anchor_input = self.feat_model(anchor_input)
+        anchor_h = self.feat_model(anchor_h)
 
         src_index, dst_index = anchor_graph.edges()
         src_index = src_index.squeeze()
         dst_index = dst_index.squeeze()
         anchor_edge_index = torch.stack([src_index, dst_index], dim=0)
-        anchor_edge_vectors = anchor_x[anchor_edge_index[0]] - anchor_x[anchor_edge_index[1]]  # 形状为 [n_edges, 3]
-        anchor_edge_vectors_normalized = _normalize(anchor_edge_vectors).unsqueeze(-2)  # 变为 [n_edges, 1, 3]
+        anchor_edge_vectors = anchor_x[anchor_edge_index[0]] - anchor_x[anchor_edge_index[1]] 
+        anchor_edge_vectors_normalized = _normalize(anchor_edge_vectors).unsqueeze(-2) 
         anchor_edge_inputs = (anchor_e, anchor_edge_vectors_normalized)
         anchor_edge_inputs = self.W_e(anchor_edge_inputs)
-        anchor_node_inputs = self.W_v(anchor_input)
+        anchor_node_inputs = self.W_v(anchor_h)
+
         tensor1, tensor2 = anchor_node_inputs
         tensor2 = tensor2 + anchor_o 
 
@@ -205,7 +171,7 @@ class QAModel(pl.LightningModule):
         anchor_graph.ndata['feat'] = anchor_z
         anchor_final_zg = dgl.mean_nodes(anchor_graph, 'feat')
 
-        x, y_level = self.mlp_readout(anchor_final_zg)  # [batch_size, 1]
+        x, y_level = self.mlp_readout(anchor_final_zg)  
         pred_lddt = x
         pred_lddt_level = y_level
 
@@ -213,26 +179,21 @@ class QAModel(pl.LightningModule):
             positive_h = positive_graph.ndata['feat'].to(self.device).float()
             positive_x = positive_graph.ndata['coords'].to(self.device).float()
             positive_o = positive_graph.ndata['ori'].to(self.device).float()
-            positive_esm = positive_graph.ndata['esm'].to(self.device).float()
             positive_e = positive_graph.edata['feat'].to(self.device).float()
-            
-            positive_h = self.nodemlp(positive_h)
-            positive_esm = self.esmmlp(positive_esm)
-            positive_input = torch.cat([positive_h, positive_esm], dim=-1)
-            positive_input = self.feat_model(positive_input)
-            
+            positive_h = self.feat_model(positive_h)
+
             src_index, dst_index = positive_graph.edges()
             src_index = src_index.squeeze()
             dst_index = dst_index.squeeze()
             positive_edge_index = torch.stack([src_index, dst_index], dim=0)
             positive_edge_vectors = positive_x[positive_edge_index[0]] - positive_x[
                 positive_edge_index[1]]  # 形状为 [n_edges, 3]
-            positive_edge_vectors_normalized = _normalize(positive_edge_vectors).unsqueeze(-2)  # 变为 [n_edges, 1, 3]
+            positive_edge_vectors_normalized = _normalize(positive_edge_vectors).unsqueeze(-2)  
             positive_edge_inputs = (positive_e, positive_edge_vectors_normalized)
             positive_edge_inputs = self.W_e(positive_edge_inputs)
-            positive_node_inputs = self.W_v(positive_input)
+            positive_node_inputs = self.W_v(positive_h)
             tensor1, tensor2 = positive_node_inputs
-            tensor2 = tensor2 + positive_o
+            tensor2 = tensor2 + positive_o 
             positive_node_inputs = (tensor1, tensor2)
             for layer in self.gvp:
                 positive_node_inputs = layer(positive_node_inputs, positive_edge_index, positive_edge_inputs)
@@ -244,13 +205,8 @@ class QAModel(pl.LightningModule):
                 negative_h = negative_graph.ndata['feat'].to(self.device).float()
                 negative_x = negative_graph.ndata['coords'].to(self.device).float()
                 negative_o = negative_graph.ndata['ori'].to(self.device).float()
-                negative_esm = negative_graph.ndata['esm'].to(self.device).float()
                 negative_e = negative_graph.edata['feat'].to(self.device).float()
-
-                negative_h = self.nodemlp(negative_h)
-                negative_esm = self.esmmlp(negative_esm)
-                negative_input = torch.cat([negative_h, negative_esm], dim=-1)
-                negative_input = self.feat_model(negative_input)
+                negative_h = self.feat_model(negative_h)
 
                 src_index, dst_index = negative_graph.edges()
                 src_index = src_index.squeeze()
@@ -258,12 +214,12 @@ class QAModel(pl.LightningModule):
                 negative_edge_index = torch.stack([src_index, dst_index], dim=0)
                 negative_edge_vectors = negative_x[negative_edge_index[0]] - negative_x[
                     negative_edge_index[1]]  # 形状为 [n_edges, 3]
-                negative_edge_vectors_normalized = _normalize(negative_edge_vectors).unsqueeze(-2)  # 变为 [n_edges, 1, 3]
+                negative_edge_vectors_normalized = _normalize(negative_edge_vectors).unsqueeze(-2)  
                 negative_edge_inputs = (negative_e, negative_edge_vectors_normalized)
                 negative_edge_inputs = self.W_e(negative_edge_inputs)
-                negative_node_inputs = self.W_v(negative_input)
+                negative_node_inputs = self.W_v(negative_h)
                 tensor1, tensor2 = negative_node_inputs
-                tensor2 = tensor2 + negative_o 
+                tensor2 = tensor2 + negative_o  
                 negative_node_inputs = (tensor1, tensor2)
                 for layer in self.gvp:
                     negative_node_inputs = layer(negative_node_inputs, negative_edge_index, negative_edge_inputs)
@@ -287,4 +243,4 @@ class QAModel(pl.LightningModule):
                                               anchor_score, neg_scores, anchor_target, neg_targets)
             return pred_lddt, pred_lddt_level, contrast_loss
 
-        return pred_lddt, pred_lddt_level 
+        return pred_lddt, pred_lddt_level
