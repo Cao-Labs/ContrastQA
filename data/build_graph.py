@@ -9,18 +9,15 @@ from einops import rearrange
 from typing import List
 from sklearn.metrics.pairwise import euclidean_distances
 from sklearn.preprocessing import MinMaxScaler
-
 import dgl
 import torch
 
-# 将项目根目录加入到 sys.path 中
-
-sys.path.append('/mnt/d/pycharm/pycharmProjects/ideamodel3qa')
-from data.dproq_feature.utils import pdb2fasta, laplacian_positional_encoding, \
+sys.path.append('/mnt/d/pycharm/pycharmProjects/qa')
+from data.utils import pdb2fasta, laplacian_positional_encoding, \
     ss3_one_hot, sequence_one_hot, pdb2graph_new_chain_info, update_node_feature, update_edge_feature
-from data.utils.tri_D import tri_location_D
-from data.utils.util import get_distmaps, process_model, AA_to_tip, edge_positional_embeddings, orientations
-from data.dproq_feature.dssp import get_dssp
+from data.tri_D import tri_location_D
+from data.utils import get_distmaps, process_model, AA_to_tip, edge_positional_embeddings, orientations
+from data.dssp import get_dssp
 
 
 def filter_atoms(test_df: pd.DataFrame, atom_type: str) -> pd.DataFrame:
@@ -75,7 +72,7 @@ def extract_multi_distance_map(pdb_file):
     return output
 
 
-# tri_d 特征
+# tri_d feature
 def generate_tri_d(pdb_file):
     maps = extract_multi_distance_map(pdb_file)
     cb_d = maps[:, :, 0]
@@ -96,7 +93,6 @@ def load_esm_embeddings(esm_path, pdb_name):
     with open(esm_file_path, 'rb') as f:
         esm_data = pickle.load(f)
 
-    # 直接返回原始的ESM嵌入特征，不进行降维
     return esm_data
 
 
@@ -110,7 +106,6 @@ def load_pdb_ca_coords(pdb_file_path):
 
     structure = parser.get_structure(os.path.basename(pdb_file_path), pdb_file_path)
 
-    # 遍历所有链和残基，提取CA原子坐标
     for model in structure:
         for chain in model:
             for residue in chain:
@@ -138,37 +133,35 @@ def build_protein_graph(pdb_file: str,
     # 1. extract sequence from pdb
     sequence = pdb2fasta(pdb_file)
 
-    # 3. build graph and extract edges and PEEE
+    # 2. build graph and extract edges and PEEE
     _, g, edges, peee = pdb2graph_new_chain_info(pdb_file, knn=10)
 
-    # 4. node features
-    # 4.1. dssp
+    # 3. node features
+    # 3.1. dssp
     dssp_feature = get_dssp(fasta_file, pdb_file)
-    dssp_feature = torch.cat(dssp_feature, dim=1)  # 按第1维拼接
+    dssp_feature = torch.cat(dssp_feature, dim=1)  
     dssp_feature = torch.tensor(dssp_feature, dtype=torch.float32)
 
-    # 4.2. sequence one hot as node
+    # 3.2. sequence one hot as node
     one_hot_feature = sequence_one_hot(sequence)
 
-    # 4.3. laplacian positional encoding
+    # 3.3. laplacian positional encoding
     lap_enc_feature = laplacian_positional_encoding(g, pos_enc_dim=8)
 
-    # 4.4 triangular position feature
+    # 3.4 triangular position feature
     tri = generate_tri_d(pdb_file)
     tri = torch.tensor(tri, dtype=torch.float32)
 
-    # 4.5 esm embedding feature
+    # 3.5 esm embedding feature
     esm_file_path = esm_path
     esm_features = []
-    # 加载ESM嵌入特征
-    if os.path.exists(esm_file_path):  # 确保 ESM 文件存在
+    if os.path.exists(esm_file_path):  
         esm_embeddings = load_esm_embeddings(esm_path, pdb_file)
         for chain, layers in esm_embeddings.items():
             if isinstance(layers, dict):
                 for layer, embedding in layers.items():
-                    # 确保 ESM 嵌入特征的形状一致
                     esm_features.append(np.array(embedding))
-            elif isinstance(layers, np.ndarray):  # 如果 layers 是 ndarray，按索引访问
+            elif isinstance(layers, np.ndarray): 
                 for i, embedding in enumerate(layers):
                     esm_features.append(np.array(embedding))
             else:
@@ -177,26 +170,26 @@ def build_protein_graph(pdb_file: str,
         print(f"Warning: ESM embedding file not found for {pdb_file}")
         return None
 
-    esm_features = np.vstack(esm_features)  # 将 ESM 特征合并为一个大数组
+    esm_features = np.vstack(esm_features)  
     esm_features = torch.tensor(esm_features, dtype=torch.float32)
     esm_reduced_features = esmmlp(esm_features)
 
-    # 4.6 coords for input
+    # 3.6 coords for input
     pdb_coords = load_pdb_ca_coords(pdb_file)
     pdb_coords = torch.tensor(pdb_coords, dtype=torch.float32)
 
-    # 4.7 计算方向向量特征
+    # 3.7 orientation feature
     node_ori = orientations(pdb_coords)
     if isinstance(node_ori, torch.Tensor):
         node_ori_tensor = node_ori.clone().detach()
     else:
         node_ori_tensor = torch.tensor(node_ori, dtype=torch.float32)
 
-    # 5. edge features
-    # 5.1. edge sine position encoding
+    # 4. edge features
+    # 4.1. edge sine position encoding
     edge_sin_pos = torch.sin((g.edges()[0] - g.edges()[1]).float()).reshape(-1, 1)
 
-    # 5.2. CA-CA, CB-CB, N-O distance
+    # 4.2. CA-CA, CB-CB, N-O distance
     # load distance map
     CACA = dist_matirx[0]
     CBCB = dist_matirx[1]
@@ -215,27 +208,24 @@ def build_protein_graph(pdb_file: str,
     cbcb_feature = torch.tensor(scaler.fit_transform(torch.tensor(cbcb_feature).reshape(-1, 1)))
     no_feature = torch.tensor(scaler.fit_transform(torch.tensor(no_feature).reshape(-1, 1)))
 
-    # 5.3 egde position embedding
+    # 4.3 egde position embedding
     src, dst = g.edges()
     edge_index = torch.stack([src, dst], dim=0)
     edge_pos_encodings = edge_positional_embeddings(g, edge_index, num_embeddings=16)
 
-    # 6. add feature to graph
+    # 5. add feature to graph
     update_node_feature(g, [dssp_feature, one_hot_feature, lap_enc_feature, tri])
 
     original_node_feature = g.ndata['feat'].float()
     up_node_feature = nodefeatmlp(original_node_feature)  # shape:[N,55] -> [N,512]
     esm_reduced_features = esm_reduced_features.to(up_node_feature.device)
-    # 关键性维度校验
     assert up_node_feature.shape == esm_reduced_features.shape, \
         f"Shape mismatch: {up_node_feature.shape} vs {esm_reduced_features.shape}"
-    # 直接相加
     combined_features = up_node_feature + esm_reduced_features
     g.ndata['feat'] = combined_features
 
     g.ndata['coords'] = pdb_coords
     g.ndata['ori'] = node_ori_tensor
-    g.ndata['seq'] = one_hot_feature
     print(g.ndata['feat'].shape)
     update_edge_feature(g, [edge_sin_pos, caca_feature,
                             cbcb_feature, no_feature,
