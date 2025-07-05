@@ -7,7 +7,8 @@ from tqdm import tqdm
 import torch
 from natsort import natsorted
 from torch.utils.data import DataLoader
-from data.data_generator import distance_helper_v2, build_protein_graph
+from data.data_generator import ESMMLP, NodeFeatureMLP
+from data.build_graph import distance_helper_v2, build_protein_graph
 from data.utils import pdb2fasta
 from model.dataset import TestData, collate
 from model.test_model import QAModel
@@ -57,7 +58,7 @@ def save_fasta_from_pdb(pathToInput, pathToSave):
     return fasta_dir
 
 
-def wrapper(pdb_file: str, fasta_file: str, esm_file: str, dgl_file: str, pdb_id: str):
+def wrapper(pdb_file: str, fasta_file: str, esm_file: str, dgl_file: str, pdb_id: str, esmmlp, nodefeatmlp):
     try:
         if os.path.exists(dgl_file):
             return None
@@ -70,7 +71,9 @@ def wrapper(pdb_file: str, fasta_file: str, esm_file: str, dgl_file: str, pdb_id
                             model_name=pdb_id,
                             esm_path=esm_file,
                             out=dgl_file,
-                            dist_matirx=dist_matirx_list)
+                            dist_matirx=dist_matirx_list,
+                            esmmlp=esmmlp, nodefeatmlp=nodefeatmlp
+                           )
 
         print(f"Processed {pdb_id} and saved to {dgl_file}.")
     except Exception as e:
@@ -109,12 +112,14 @@ def esm_emb_generate(pathToInput, pathToSave):
     return esm_pkl_path
 
 
-def dgl_generate(pdb_data_path, fasta_data_path, pathToSave, esm_data_path):
+def dgl_generate(pdb_data_path, fasta_data_path, pathToSave, esm_data_path, esmmlp, nodefeatmlp):
     """
     Args:
         pdb_data_path: PDB file input path
         pathToSave: dgl graph save path
         esm_data_path:esm data file input path
+        esmmlp: esmmlp
+        nodefeatmlp: nodefeatmlp
     Returns: dgl file
     """
     pathToTempDirectory = join(pathToSave, 'tmp')
@@ -156,7 +161,7 @@ def dgl_generate(pdb_data_path, fasta_data_path, pathToSave, esm_data_path):
                 print(f"File {dgl_save_path} already exists, skipping...")
                 continue
 
-            wrapper(pdb_file, fasta_file, esm_pkl_file, dgl_save_path, pdb_base_name)
+            wrapper(pdb_file, fasta_file, esm_pkl_file, dgl_save_path, pdb_base_name, esmmlp, nodefeatmlp)
 
     print('DGL generate All done.')
     return dgl_generate_path
@@ -239,6 +244,16 @@ def evaluate_QA_results(dgl_input, pathToSave):
     print(f"Results saved to {result_folder}")
 
 def main(pathToInput, pathToSave):
+    # load ESMMLP 和 NodeFeatureMLP weights
+    esmmlp = ESMMLP()
+    nodefeatmlp = NodeFeatureMLP()
+
+    esmmlp.load_state_dict(torch.load('./model/checkpoints/esmmlp.pth', map_location='cuda'))
+    nodefeatmlp.load_state_dict(torch.load('./model/checkpoints/nodefeatmlp.pth', map_location='cuda'))
+
+    esmmlp.eval()
+    nodefeatmlp.eval()
+    
     start = timer()
 
     pattern = re.compile(r'[a-zA-Z0-9]{4,20}')
@@ -266,7 +281,7 @@ def main(pathToInput, pathToSave):
     pdb_input_path = pathToInput
 
     # transform pkl to dgl file
-    dgl_input_path = dgl_generate(pdb_input_path, fasta_data_path, pathToSave, esm_input_path)
+    dgl_input_path = dgl_generate(pdb_input_path, fasta_data_path, pathToSave, esm_input_path, esmmlp, nodefeatmlp)
     print('dgl graphs generation done...')
 
     # result
