@@ -248,8 +248,8 @@ def main(pathToInput, pathToSave):
     esmmlp = ESMMLP()
     nodefeatmlp = NodeFeatureMLP()
 
-    esmmlp.load_state_dict(torch.load('./model/checkpoints/esmmlp.pth', map_location='cuda'))
-    nodefeatmlp.load_state_dict(torch.load('./model/checkpoints/nodefeatmlp.pth', map_location='cuda'))
+    esmmlp.load_state_dict(torch.load('./weight/esmmlp.pth', map_location='cuda'))
+    nodefeatmlp.load_state_dict(torch.load('./weight/nodefeatmlp.pth', map_location='cuda'))
 
     esmmlp.eval()
     nodefeatmlp.eval()
