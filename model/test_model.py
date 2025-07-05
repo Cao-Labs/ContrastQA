@@ -1,19 +1,16 @@
 import json
-import os
-from datetime import datetime
 import dgl
 import torch
 from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
-import torchmetrics
 from model.dataset import MLPReadoutlddtClass
 from model.GVP_GNN import GVPConvLayer, _normalize, LayerNorm, GVP
 
 CUDA_LAUNCH_BLOCKING = 1
 
 # load config file
-config_file = f'path/to/pre_train_knn_seed42.json'
+config_file = f'path/to/pre_train_knn10_seed42.json'
 with open(config_file) as f:
     print(f'Loading config file {config_file}')
     config = json.load(f)
