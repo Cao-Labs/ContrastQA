@@ -94,19 +94,6 @@ class QAModel(pl.LightningModule):
 
         pl.seed_everything(_seed)
 
-        # mlp for features
-        self.esmmlp = nn.Sequential(
-            nn.Linear(1280, self.node_input_dim),
-            nn.ReLU(),
-            nn.LayerNorm(self.node_input_dim)
-        )
-
-        self.nodemlp = nn.Sequential(
-            nn.Linear(55, self.node_input_dim),
-            nn.ReLU(),
-            nn.LayerNorm(self.node_input_dim)
-        )
-        
         # model components
         self.mse_weight = _mse_weight
         self.ce_weight = _ce_weight
@@ -114,7 +101,7 @@ class QAModel(pl.LightningModule):
 
         # model_feature
         self.feat_model = nn.Sequential(
-            nn.Linear(2 * self.node_input_dim, self.node_gvp_input_dim),
+            nn.Linear(self.node_input_dim, self.node_gvp_input_dim),
             nn.ReLU(),
             nn.LayerNorm(self.node_gvp_input_dim)
         )
@@ -221,13 +208,9 @@ class QAModel(pl.LightningModule):
         anchor_h = anchor_graph.ndata['feat'].to(self.device).float()
         anchor_x = anchor_graph.ndata['coords'].to(self.device).float()
         anchor_o = anchor_graph.ndata['ori'].to(self.device).float()
-        anchor_esm = anchor_graph.ndata['esm'].to(self.device).float()
         anchor_e = anchor_graph.edata['feat'].to(self.device).float()
 
-        anchor_h = self.nodemlp(anchor_h)
-        anchor_esm = self.esmmlp(anchor_esm)
-        anchor_input = torch.cat([anchor_h, anchor_esm], dim=-1)
-        anchor_input = self.feat_model(anchor_input)
+        anchor_input = self.feat_model(anchor_h)
 
         src_index, dst_index = anchor_graph.edges()
         src_index = src_index.squeeze()
@@ -252,13 +235,9 @@ class QAModel(pl.LightningModule):
         positive_h = positive_graph.ndata['feat'].to(self.device).float()
         positive_x = positive_graph.ndata['coords'].to(self.device).float()
         positive_o = positive_graph.ndata['ori'].to(self.device).float()
-        positive_esm = positive_graph.ndata['esm'].to(self.device).float()
         positive_e = positive_graph.edata['feat'].to(self.device).float()
 
-        positive_h = self.nodemlp(positive_h)
-        positive_esm = self.esmmlp(positive_esm)
-        positive_input = torch.cat([positive_h, positive_esm], dim=-1)
-        positive_input = self.feat_model(positive_input)
+        positive_input = self.feat_model(positive_h)
 
         src_index, dst_index = positive_graph.edges()
         src_index = src_index.squeeze()
@@ -284,13 +263,9 @@ class QAModel(pl.LightningModule):
             negative_h = negative_graph.ndata['feat'].to(self.device).float()
             negative_x = negative_graph.ndata['coords'].to(self.device).float()
             negative_o = negative_graph.ndata['ori'].to(self.device).float()
-            negative_esm = negative_graph.ndata['esm'].to(self.device).float()
             negative_e = negative_graph.edata['feat'].to(self.device).float()
-
-            negative_h = self.nodemlp(negative_h)
-            negative_esm = self.esmmlp(negative_esm)
-            negative_input = torch.cat([negative_h, negative_esm], dim=-1)
-            negative_input = self.feat_model(negative_input)
+            
+            negative_input = self.feat_model(negative_h)
 
             src_index, dst_index = negative_graph.edges()
             src_index = src_index.squeeze()
@@ -489,7 +464,7 @@ class QAModel(pl.LightningModule):
     def on_train_end(self):
         print("Training is finished. Saving losses...")
         # save losses json file
-        save_path = r"../data/temp_out/losses/losses_gvp_gcl_lddt_v1.json"
+        save_path = r"path/to/loss.json"
 
         losses_dict = {
             "train_losses": self.train_losses,
@@ -583,11 +558,9 @@ val_loader = DataLoader(val_dataset, batch_size=_batch_size, num_workers=4, pin_
 
 model = QAModel().to('cuda')
 
-
 def init_weights(m):
     if type(m) == nn.Linear:
         torch.nn.init.xavier_uniform_(m.weight)
-
 
 model.apply(init_weights)
 
