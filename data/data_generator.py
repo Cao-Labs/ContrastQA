@@ -118,15 +118,35 @@ def load_pdb_ca_coords(pdb_file_path):
 
     coords = np.array(ca_coordinates)
     return coords
-    
+
+
+class ESMMLP(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear = nn.Linear(1280, 512)
+
+    def forward(self, x):
+        return self.linear(x)
+
+
+class NodeFeatureMLP(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear = nn.Linear(55, 512) 
+
+    def forward(self, x):
+        return self.linear(x)
+
 
 def build_protein_graph(pdb_file: str,
                         fasta_file: str,
                         model_name: str,
                         esm_path: str,
                         out: str,
-                        dist_matirx: List[np.ndarray]):
-    """Build KNN graph and assign node and edge features. node feature: N * 55, esm feature: N * 1280, Edge feature: E * 22"""
+                        dist_matirx: List[np.ndarray],
+                        esmmlp: nn.Module,
+                        nodefeatmlp: nn.Module):
+    """Build KNN graph and assign node and edge features. node feature: N * 512, Edge feature: E * 22"""
 
     print(f'build protein graph step Processing {model_name}')
     scaler = MinMaxScaler()
@@ -140,7 +160,7 @@ def build_protein_graph(pdb_file: str,
     # 3. node features
     # 3.1. dssp
     dssp_feature = get_dssp(fasta_file, pdb_file)
-    dssp_feature = torch.cat(dssp_feature, dim=1)  # 按第1维拼接
+    dssp_feature = torch.cat(dssp_feature, dim=1) 
     dssp_feature = torch.tensor(dssp_feature, dtype=torch.float32)
 
     # 3.2. sequence one hot as node
@@ -156,13 +176,13 @@ def build_protein_graph(pdb_file: str,
     # 3.5 esm embedding feature
     esm_file_path = esm_path
     esm_features = []
-    if os.path.exists(esm_file_path): 
+    if os.path.exists(esm_file_path):  
         esm_embeddings = load_esm_embeddings(esm_path, pdb_file)
         for chain, layers in esm_embeddings.items():
             if isinstance(layers, dict):
                 for layer, embedding in layers.items():
                     esm_features.append(np.array(embedding))
-            elif isinstance(layers, np.ndarray):
+            elif isinstance(layers, np.ndarray):  
                 for i, embedding in enumerate(layers):
                     esm_features.append(np.array(embedding))
             else:
@@ -171,14 +191,15 @@ def build_protein_graph(pdb_file: str,
         print(f"Warning: ESM embedding file not found for {pdb_file}")
         return None
 
-    esm_features = np.vstack(esm_features)
+    esm_features = np.vstack(esm_features)  
     esm_features = torch.tensor(esm_features, dtype=torch.float32)
+    esm_reduced_features = esmmlp(esm_features)
 
     # 3.6 coords for input
     pdb_coords = load_pdb_ca_coords(pdb_file)
     pdb_coords = torch.tensor(pdb_coords, dtype=torch.float32)
 
-    # 3.7 ori features
+    # 3.7 ori feature
     node_ori = orientations(pdb_coords)
     if isinstance(node_ori, torch.Tensor):
         node_ori_tensor = node_ori.clone().detach()
@@ -216,10 +237,17 @@ def build_protein_graph(pdb_file: str,
     # 5. add feature to graph
     update_node_feature(g, [dssp_feature, one_hot_feature, lap_enc_feature, tri])
 
+    original_node_feature = g.ndata['feat'].float()
+    up_node_feature = nodefeatmlp(original_node_feature)  # shape:[N,55] -> [N,512]
+    esm_reduced_features = esm_reduced_features.to(up_node_feature.device)
+    assert up_node_feature.shape == esm_reduced_features.shape, \
+        f"Shape mismatch: {up_node_feature.shape} vs {esm_reduced_features.shape}"
+    combined_features = up_node_feature + esm_reduced_features
+    g.ndata['feat'] = combined_features
+
     g.ndata['coords'] = pdb_coords
     g.ndata['ori'] = node_ori_tensor
-    g.ndata['esm'] = esm_features
-
+    print(g.ndata['feat'].shape)
     update_edge_feature(g, [edge_sin_pos, caca_feature,
                             cbcb_feature, no_feature,
                             contact_feature, peee, edge_pos_encodings])
@@ -228,7 +256,8 @@ def build_protein_graph(pdb_file: str,
     return None
 
 
-def wrapper(pdb_file: str, fasta_file: str, esm_file: str, dgl_file: str, pdb_id: str):
+def wrapper(pdb_file: str, fasta_file: str, esm_file: str, dgl_file: str, pdb_id: str,
+            esmmlp: nn.Module, nodefeatmlp: nn.Module):
     print(f"wrapper step Processing PDB file: {pdb_file}")
     dist_matirx_list = distance_helper_v2(pdb_file)
 
@@ -237,9 +266,13 @@ def wrapper(pdb_file: str, fasta_file: str, esm_file: str, dgl_file: str, pdb_id
                         model_name=pdb_id,
                         esm_path=esm_file,
                         out=dgl_file,
-                        dist_matirx=dist_matirx_list)
+                        dist_matirx=dist_matirx_list,
+                        esmmlp=esmmlp,
+                        nodefeatmlp=nodefeatmlp
+                        )
 
     return None
+
 
 
 if __name__ == '__main__':
@@ -258,6 +291,9 @@ if __name__ == '__main__':
     if not os.path.isdir(input_pdb_folder):
         raise FileNotFoundError(f'Please check input pdb folder {input_pdb_folder}')
     input_pdb_folder = os.path.abspath(input_pdb_folder)  # get absolute path
+
+    esmmlp = ESMMLP()
+    nodefeatmlp = NodeFeatureMLP()
 
     subfolders = natsorted([f.path for f in os.scandir(input_pdb_folder) if f.is_dir()])
 
@@ -300,6 +336,10 @@ if __name__ == '__main__':
                 dgl_file_name = f"{pdb_base_name}.dgl"
                 dgl_save_path = os.path.join(dgl_subfolder, dgl_file_name)
 
-                wrapper(pdb_file, fasta_file, esm_pkl_file, dgl_save_path, pdb_base_name)
+                wrapper(pdb_file, fasta_file, esm_pkl_file, dgl_save_path, pdb_base_name,
+                        esmmlp=esmmlp, nodefeatmlp=nodefeatmlp)
 
-    print('All done.')
+    # Save trained feature extractors
+    torch.save(esmmlp.state_dict(), os.path.join(dgl_save_folder, "esmmlp.pth"))
+    torch.save(nodefeatmlp.state_dict(), os.path.join(dgl_save_folder, "nodefeatmlp.pth"))
+    print("All done. ESMMLP and NodeFeatureMLP weights saved.")
