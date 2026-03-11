@@ -15,7 +15,6 @@ def get_dssp(fasta_file, pdb_path):
             115, 135, 150, 190, 210, 75, 195, 175, 200, 170,
             185, 160, 145, 180, 225, 115, 140, 155, 255, 230,
         ]  # Standard relative accessible surface areas
-
         with open(dssp_file, "r") as f:  # Open DSSP output file
             lines = f.readlines()  # Read all lines
 
@@ -44,28 +43,29 @@ def get_dssp(fasta_file, pdb_path):
         return seq, dssp_feature  # Return sequence and DSSP features
 
     def match_dssp(seq, dssp, ref_seq):
-        alignments = pairwise2.align.globalxx(ref_seq, seq)  
-        ref_seq = alignments[0].seqA  
-        seq = alignments[0].seqB  
+        alignments = pairwise2.align.globalxx(ref_seq, seq)  # 对齐参考序列和 DSSP 序列
+        ref_seq = alignments[0].seqA  # 获取对齐后的参考序列
+        seq = alignments[0].seqB  # 获取对齐后的 DSSP 序列
 
-        SS_vec = np.zeros(9)  
+        SS_vec = np.zeros(9)  # 定义缺失的二级结构向量
         SS_vec[-1] = 1
-        padded_item = np.concatenate((np.array([360, 360, 0]), SS_vec))  
+        padded_item = np.concatenate((np.array([360, 360, 0]), SS_vec))  # 填充缺失项
 
-        new_dssp = [] 
+        new_dssp = []  # 初始化填充后的 DSSP 特征列表
         for aa in seq:
-            if aa == "-": 
-                new_dssp.append(padded_item) 
+            if aa == "-":  # 如果是 DSSP 序列中的 gap
+                new_dssp.append(padded_item)  # 添加填充项
             else:
-                new_dssp.append(dssp.pop(0))
+                new_dssp.append(dssp.pop(0))  # 否则添加 DSSP 特征
 
-        matched_dssp = []  
+        matched_dssp = []  # 初始化匹配的 DSSP 特征列表
         for i in range(len(ref_seq)):
-            if ref_seq[i] == "-": 
+            if ref_seq[i] == "-":  # 跳过参考序列中的 gap
                 continue
+            # 确保填充对应的是 ref_seq 中非 gap 的位置
             matched_dssp.append(new_dssp[i])
 
-        return new_dssp 
+        return new_dssp  # 返回匹配后的 DSSP 特征
 
     def transform_dssp(dssp_feature):
         dssp_feature = np.array(dssp_feature)  # Convert DSSP features to NumPy array
@@ -82,7 +82,7 @@ def get_dssp(fasta_file, pdb_path):
             dssp_file = pdb_path + ".dssp"
             os.system(f"{DSSP} -i {pdb_path} -o {dssp_file}")  # Run DSSP to generate DSSP file
 
-            if not os.path.exists(dssp_file):  
+            if not os.path.exists(dssp_file):  # 检查 DSSP 文件是否生成
                 print(f"DSSP file not generated for {pdb_path}, skipping...")
                 return None
 
@@ -99,16 +99,30 @@ def get_dssp(fasta_file, pdb_path):
             return None
 
     # Read the FASTA file and extract sequences
-    pdbfasta = {}  # Dictionary to map PDB file names to sequences
+    # Read the FASTA file and extract sequences
+    pdbfasta = {}
     with open(fasta_file) as r1:
-        fasta_ori = r1.readlines()  # Read all lines
+        lines = r1.readlines()
 
-    for i in range(len(fasta_ori)):
-        if fasta_ori[i][0] == ">":  # Header line in FASTA
-            name = fasta_ori[i].split(">")[1].replace("\n", "")
-            seq = fasta_ori[i + 1].replace("\n", "")
-            pdbfasta[name] = seq  # Map name to sequence
-            print(name)
+    i = 0
+    while i < len(lines):
+        if lines[i][0] == ">":  # Header line
+            name = lines[i].split(">")[1].strip()
+            i += 1
+
+            # 收集所有序列行，直到遇到下一个">"或文件结束
+            seq_lines = []
+            while i < len(lines) and not lines[i].startswith(">"):
+                if lines[i].strip():  # 忽略空行
+                    seq_lines.append(lines[i].strip())
+                i += 1
+
+            # 拼接所有序列行
+            seq = "".join(seq_lines)
+            pdbfasta[name] = seq
+            print(f"Processed: {name}, sequence length: {len(seq)}")
+        else:
+            i += 1
     fault_name = []  # List to store names of sequences that failed DSSP processing
     dssp_tensors = []  # List to store DSSP tensors
 
@@ -122,6 +136,7 @@ def get_dssp(fasta_file, pdb_path):
 
     if fault_name != []:  # If there are any faults
         print(f"Faulty sequences: {fault_name}")  # Print the faulty sequence names
+    # 处理完所有文件后，可以输出未成功生成 DSSP 文件的列表
 
     return dssp_tensors  # Return all DSSP tensors
 
